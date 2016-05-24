@@ -1,0 +1,5 @@
+pluggy==0.3.1
+py==1.4.31
+requests==2.10.0
+tox==2.3.1
+-e git+git@github.com:jantman/rpymostat-common.git@master#egg=rpymostat-common

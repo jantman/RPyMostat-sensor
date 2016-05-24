@@ -77,12 +77,13 @@ To install for development:
 1. Fork the `RPyMostat-sensor <https://github.com/jantman/RPyMostat-sensor>`_ repository on GitHub
 2. Create a new branch off of master in your fork.
 
+
 .. code-block:: bash
 
-    $ virtualenv RPyMostat-sensor
-    $ cd RPyMostat-sensor && source bin/activate
-    $ pip install -e git+git@github.com:YOURNAME/RPyMostat-sensor.git@BRANCHNAME#egg=RPyMostat-sensor
-    $ cd src/RPyMostat-sensor
+    $ git clone git@github.com:YOURNAME/RPyMostat-sensor.git
+    $ cd RPyMostat-sensor
+    $ virtualenv . && source bin/activate
+    $ pip install -r requirements_dev.txt
 
 The git clone you're now in will probably be checked out to a specific commit,
 so you may want to ``git checkout BRANCHNAME``.
