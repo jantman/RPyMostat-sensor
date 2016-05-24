@@ -35,44 +35,45 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 ##################################################################################
 """
 
-from setuptools import setup, find_packages
-from sys import version_info
-from rpymostat_sensor.version import VERSION, PROJECT_URL
+import abc
+import logging
 
-entry_points = {
-    'rpymostat.sensors': [
-        'usb_onewire = rpymostat_sensor.sensors.usb_onewire:UsbOneWireSensor'
-    ],
-    'console_scripts': [
-        'rpymostat-sensor = rpymostat_sensor.runner:console_entry_point'
-    ]
-}
+logger = logging.getLogger(__name__)
 
-with open('README.rst') as file:
-    long_description = file.read()
 
-requires = [
-    'requests'
-]
+class BaseSensor(object):
+    """
+    Base class for the interface that all hardware Sensor classes must
+    implement. Any class that implements this interface will be usable to
+    discover and read sensors. Note that classes implementing this must also
+    have a matching entrypoint in order to be discovered.
+    """
 
-classifiers = [
-    'Development Status :: 1 - Planning',
-    'Programming Language :: Python',
-    'Programming Language :: Python :: 3',
-]
+    __metaclass__ = abc.ABCMeta
 
-setup(
-    name='rpymostat-sensor',
-    version=VERSION,
-    author='Jason Antman',
-    author_email='jason@jasonantman.com',
-    packages=find_packages(),
-    url=PROJECT_URL,
-    license='AGPLv3+',
-    description='The temperature sensor component of RPyMostat.',
-    long_description=long_description,
-    install_requires=requires,
-    keywords="temperature thermometer nest thermostat automation control home",
-    classifiers=classifiers,
-    entry_points=entry_points
-)
+    def __init__(self):
+        pass
+
+    @abc.abstractmethod
+    def sensors_present(self):
+        """
+        Discover all matching sensors on the system. Return True if sensors
+        were discovered, False otherwise. The class should cache information
+        on the discovered sensors in order to read them later.
+
+        :return: whether or not matching sensors are present
+        :rtype: bool
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def read(self):
+        """
+        Read the current value of all sensors. For clarity, the value should
+        always be a float degrees Celsius. Also returns metadata about them.
+        Return value should be a JSON-serializable dict.
+
+        :return: unknown
+        :rtype: unknown
+        """
+        raise NotImplementedError()

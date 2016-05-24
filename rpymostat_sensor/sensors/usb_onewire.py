@@ -35,44 +35,33 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 ##################################################################################
 """
 
-from setuptools import setup, find_packages
-from sys import version_info
-from rpymostat_sensor.version import VERSION, PROJECT_URL
+import random
 
-entry_points = {
-    'rpymostat.sensors': [
-        'usb_onewire = rpymostat_sensor.sensors.usb_onewire:UsbOneWireSensor'
-    ],
-    'console_scripts': [
-        'rpymostat-sensor = rpymostat_sensor.runner:console_entry_point'
-    ]
-}
+from rpymostat_sensor.sensors.base import BaseSensor
 
-with open('README.rst') as file:
-    long_description = file.read()
 
-requires = [
-    'requests'
-]
+class UsbOneWireSensor(BaseSensor):
+    """
+    Dummy sensor class that returns random temperatures.
+    """
 
-classifiers = [
-    'Development Status :: 1 - Planning',
-    'Programming Language :: Python',
-    'Programming Language :: Python :: 3',
-]
+    def sensors_present(self):
+        """
+        Discover a single dummy temperature sensor.
 
-setup(
-    name='rpymostat-sensor',
-    version=VERSION,
-    author='Jason Antman',
-    author_email='jason@jasonantman.com',
-    packages=find_packages(),
-    url=PROJECT_URL,
-    license='AGPLv3+',
-    description='The temperature sensor component of RPyMostat.',
-    long_description=long_description,
-    install_requires=requires,
-    keywords="temperature thermometer nest thermostat automation control home",
-    classifiers=classifiers,
-    entry_points=entry_points
-)
+        :return: True because it's always here
+        :rtype: bool
+        """
+        return True
+
+    def read(self):
+        """
+        Return a random float temperature in the range 18-27 C.
+
+        :param sensor_id: the sensor ID to read (key from the dict returned
+          by :py:meth:`~.discover`)
+        :type sensor_id: str
+        :return: random temperature in degrees Celsius
+        :rtype: float
+        """
+        return random.randrange(18, 27, 0.125)

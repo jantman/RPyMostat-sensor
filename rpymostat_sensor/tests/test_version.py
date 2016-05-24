@@ -35,44 +35,39 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 ##################################################################################
 """
 
-from setuptools import setup, find_packages
-from sys import version_info
-from rpymostat_sensor.version import VERSION, PROJECT_URL
+import rpymostat_sensor.version as version
 
-entry_points = {
-    'rpymostat.sensors': [
-        'usb_onewire = rpymostat_sensor.sensors.usb_onewire:UsbOneWireSensor'
-    ],
-    'console_scripts': [
-        'rpymostat-sensor = rpymostat_sensor.runner:console_entry_point'
-    ]
-}
+import re
 
-with open('README.rst') as file:
-    long_description = file.read()
 
-requires = [
-    'requests'
-]
+class TestVersion(object):
 
-classifiers = [
-    'Development Status :: 1 - Planning',
-    'Programming Language :: Python',
-    'Programming Language :: Python :: 3',
-]
+    def test_project_url(self):
+        expected = 'https://github.com/jantman/RPyMostat-sensor'
+        assert version.PROJECT_URL == expected
 
-setup(
-    name='rpymostat-sensor',
-    version=VERSION,
-    author='Jason Antman',
-    author_email='jason@jasonantman.com',
-    packages=find_packages(),
-    url=PROJECT_URL,
-    license='AGPLv3+',
-    description='The temperature sensor component of RPyMostat.',
-    long_description=long_description,
-    install_requires=requires,
-    keywords="temperature thermometer nest thermostat automation control home",
-    classifiers=classifiers,
-    entry_points=entry_points
-)
+    def test_is_semver(self):
+        # see:
+        # https://github.com/mojombo/semver.org/issues/59#issuecomment-57884619
+        semver_ptn = re.compile(
+            r'^'
+            r'(?P<MAJOR>(?:'
+            r'0|(?:[1-9]\d*)'
+            r'))'
+            r'\.'
+            r'(?P<MINOR>(?:'
+            r'0|(?:[1-9]\d*)'
+            r'))'
+            r'\.'
+            r'(?P<PATCH>(?:'
+            r'0|(?:[1-9]\d*)'
+            r'))'
+            r'(?:-(?P<prerelease>'
+            r'[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*'
+            r'))?'
+            r'(?:\+(?P<build>'
+            r'[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*'
+            r'))?'
+            r'$'
+        )
+        assert semver_ptn.match(version.VERSION) is not None

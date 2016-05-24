@@ -23,7 +23,9 @@ RPyMostat-sensor
    :alt: Project Status: Active - The project has reached a stable, usable state and is being actively developed.
    :target: http://www.repostatus.org/#active
 
-Introduction here.
+This package/repo implements the Python sensor component of `RPyMostat <http://github.com/jantman/RPyMostat>`_. It
+discovers and reads local temperature sensors, and POSTs that information to the
+RPyMostat Engine API.
 
 Requirements
 ------------
@@ -41,7 +43,7 @@ system-wide, you can (using sudo).
 
 .. code-block:: bash
 
-    pip install RPyMostat-sensor
+    pip install rpymostat-sensor
 
 Configuration
 -------------
@@ -52,6 +54,13 @@ Usage
 -----
 
 Something else here.
+
+Adding Hardware Support
+------------------------
+
+fork or entrypoint that implements rpymostat_sensor.sensors.base.BaseSensor
+`setuptools entrypoints for dynamic discovery <https://pythonhosted.org/setuptools/setuptools.html#extensible-applications-and-frameworks>`_
+
 
 Bugs and Feature Requests
 -------------------------
@@ -127,3 +136,8 @@ Release Checklist
     * ``python setup.py sdist upload``
 
 10. make sure any GH issues fixed in the release were closed.
+
+License
+-------
+
+RPyMostat is licensed under the `GNU Affero General Public License, version 3 or later <http://www.gnu.org/licenses/agpl.html>`_.
