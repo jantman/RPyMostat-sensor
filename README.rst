@@ -33,6 +33,11 @@ Requirements
 * Python 2.7+ (currently tested with 2.7, 3.2, 3.3, 3.4)
 * Python `VirtualEnv <http://www.virtualenv.org/>`_ and ``pip`` (recommended installation method; your OS/distribution should have packages for these)
 
+Documentation
+-------------
+
+See the online documentation at: .
+
 Installation
 ------------
 
@@ -54,6 +59,12 @@ Usage
 -----
 
 Something else here.
+
+Built-In Sensor Support
+-----------------------
+
+* `one-wire file system (OWFS) <http://owfs.org/>`_ via the :py:class:`~.OWFS`
+  class.
 
 Adding Hardware Support
 ------------------------
