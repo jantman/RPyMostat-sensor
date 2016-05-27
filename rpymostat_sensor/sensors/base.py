@@ -51,8 +51,34 @@ class BaseSensor(object):
 
     __metaclass__ = abc.ABCMeta
 
+    # One-line string description of the type of sensor this class supports,
+    # for use in generated documentation.
+    _sensor_type = "Unknown"
+
     def __init__(self):
         pass
+
+    def get_varnames(self):
+        """
+        Return a dict of variable names that this class's init method takes,
+        to string descriptions of them (if present).
+
+>>> class Foo(object):
+...     ""
+...     my docstring
+...     ""
+...     def __init__(self, arg1, arg2, kwarg1='foo', kwarg2='bar'):
+...         pass
+...
+>>> Foo.__init__.func_code.co_varnames
+('self', 'arg1', 'arg2', 'kwarg1', 'kwarg2')
+>>> Foo.__init__.__doc__
+>>> Foo.__doc__
+'\n    my docstring\n    '
+
+        :return:
+        """
+        raise NotImplementedError()
 
     @abc.abstractmethod
     def sensors_present(self):

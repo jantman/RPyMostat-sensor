@@ -41,7 +41,7 @@ from rpymostat_sensor.version import VERSION, PROJECT_URL
 
 entry_points = {
     'rpymostat.sensors': [
-        'usb_onewire = rpymostat_sensor.sensors.usb_onewire:UsbOneWireSensor'
+        'owfs = rpymostat_sensor.sensors.owfs:OWFS'
     ],
     'console_scripts': [
         'rpymostat-sensor = rpymostat_sensor.runner:console_entry_point'

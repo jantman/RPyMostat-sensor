@@ -45,6 +45,39 @@ logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger()
 
 
+class StoreKeySubKeyValue(argparse.Action):
+    """
+    Store key=subkey=value options in a dict as {'key': {'subkey': 'value'}}.
+
+    Supports specifying the option multiple times, but NOT with ``nargs``.
+
+    See :py:class:`~argparse.Action`.
+    """
+
+    def __init__(self, option_strings, dest, nargs=None, const=None,
+                 default=None, type=None, choices=None, required=False,
+                 help=None, metavar=None):
+        super(StoreKeySubKeyValue, self).__init__(
+            option_strings, dest, nargs, const, default, type, choices,
+            required, help, metavar
+        )
+        self.default = {}
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if values.count('=') != 2:
+            raise argparse.ArgumentError(
+                self, 'must be in the form key=subkey=value'
+            )
+        k, subk, v = values.split('=')
+        # handle quotes for values with spaces
+        k = k.strip('"\'')
+        subk = subk.strip('"\'')
+        dest = getattr(namespace, self.dest)
+        if k not in dest:
+            dest[k] = {}
+        dest[k][subk] = v
+
+
 class Runner(object):
 
     def parse_args(self, argv):
@@ -75,6 +108,14 @@ class Runner(object):
         p.add_argument('-i', '--interval', dest='interval', default=60.0,
                        type=float, help='Float number of seconds to sleep '
                                         'between sensor poll/POST cycles')
+        p.add_argument('-l', '--list-sensor-classes', dest='list_classes',
+                       default=False, action='store_true', help='list all '
+                       'known sensor classes and their arguments, then exit')
+        p.add_argument('-c', '--sensor-class-arg', dest='class_args',
+                       action=StoreKeySubKeyValue, help='Provide an argument '
+                       'for a specific sensor class, in the form '
+                       'ClassName=arg_name=value; see -l for list of classes '
+                       'and their arguments')
         args = p.parse_args(argv)
         return args
 
@@ -93,12 +134,15 @@ class Runner(object):
             debug_formatter = logging.Formatter(fmt=FORMAT)
             logger.handlers[0].setFormatter(debug_formatter)
             logger.setLevel(logging.DEBUG)
+        if args.list_classes is True:
+            d = SensorDaemon(list_classes=True)
         d = SensorDaemon(
             dry_run=args.dry_run,
             dummy_data=args.dummy,
             engine_port=args.engine_port,
             engine_addr=args.engine_addr,
-            interval=args.interval
+            interval=args.interval,
+            class_args=args.class_args
         )
         d.run()
 
@@ -109,7 +153,11 @@ def console_entry_point():
     :py:meth:`~.Runner.console_entry_point` method.
     """
     r = Runner()
-    r.console_entry_point()
+    try:
+        r.console_entry_point()
+    except KeyboardInterrupt:
+        logger.warning('Exiting on keyboard interrupt.')
+        raise SystemExit(0)
 
 
 if __name__ == "__main__":

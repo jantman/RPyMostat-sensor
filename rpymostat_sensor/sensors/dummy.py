@@ -64,4 +64,8 @@ class DummySensor(BaseSensor):
         :return: random temperature in degrees Celsius
         :rtype: float
         """
-        return random.randrange(18, 27, 0.125)
+        choices = []
+        for x in range(18, 27):
+            for y in [0, 0.250, 0.500, 0.750]:
+                choices.append(x + y)
+        return random.choice(choices)

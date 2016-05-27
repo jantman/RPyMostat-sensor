@@ -99,7 +99,7 @@ class TestSensorDaemon(object):
         ]
         assert mocks['find_host_id'].mock_calls == [call(cls)]
         assert mocks['discover_engine'].mock_calls == [call(cls)]
-        assert mocks['discover_sensors'].mock_calls == [call(cls)]
+        assert mocks['discover_sensors'].mock_calls == [call(cls, {})]
 
     def test_init_nondefault(self):
         dummy = Mock()
@@ -119,7 +119,8 @@ class TestSensorDaemon(object):
                     dummy_data=True,
                     engine_port=1234,
                     engine_addr='foo.bar.baz',
-                    interval=12.34
+                    interval=12.34,
+                    class_args={'foo': 'bar'}
                 )
         assert cls.dry_run is True
         assert cls.dummy_data is True
@@ -134,7 +135,9 @@ class TestSensorDaemon(object):
         ]
         assert mocks['find_host_id'].mock_calls == [call(cls)]
         assert mocks['discover_engine'].mock_calls == []
-        assert mocks['discover_sensors'].mock_calls == [call(cls)]
+        assert mocks['discover_sensors'].mock_calls == [
+            call(cls, {'foo': 'bar'})
+        ]
 
     def test_init_no_sensors(self):
         with patch('%s.logger' % pbm, autospec=True) as mock_logger:
@@ -188,22 +191,6 @@ class TestSensorDaemon(object):
             call.debug('Sleeping %ss', 60.0)
         ]
 
-    def test_sensor_classes_dummy(self):
-        self.cls.dummy_data = True
-        with patch('%s.DummySensor' % pbm, autospec=True) as mock_dummy:
-            with patch('%s.logger' % pbm, autospec=True) as mock_logger:
-                with patch('%s.pkg_resources.iter_entry_points' % pbm,
-                           autospec=True) as mock_iep:
-                    mock_iep.return_value = []
-                res = self.cls._sensor_classes()
-        assert len(res) == 1
-        assert isinstance(res[0], DummySensor)
-        assert mock_dummy.mock_calls == [call()]
-        assert mock_logger.mock_calls == [
-            call.warning('Running with --dummy - only DummySensor() '
-                         'will be loaded')
-        ]
-
     def test_sensor_classes(self):
 
         class EP1(object):
@@ -223,9 +210,6 @@ class TestSensorDaemon(object):
         class EP3(object):
             name = 'EP3'
 
-            def __init__(self):
-                raise RuntimeError()
-
         mock_ep3 = Mock(spec_set=pkg_resources.EntryPoint)
         type(mock_ep3).name = 'ep3'
         mock_ep3.load.return_value = EP3
@@ -238,9 +222,7 @@ class TestSensorDaemon(object):
                            autospec=True) as mock_iep:
                     mock_iep.return_value = entry_points
                     res = self.cls._sensor_classes()
-        assert len(res) == 2
-        assert isinstance(res[0], EP1)
-        assert isinstance(res[1], EP2)
+        assert res == [EP1, EP2, EP3]
         assert mock_dummy.mock_calls == []
         assert mock_iep.mock_calls == [call('rpymostat.sensors')]
         assert mock_logger.mock_calls == [
@@ -251,36 +233,77 @@ class TestSensorDaemon(object):
                        'ep1'),
             call.debug('Trying to load sensor class from entry point: %s',
                        'ep3'),
-            call.exception('Exception raised when loading entry point %s',
-                           'ep3'),
-            call.debug("%s Sensor classes loaded successfully", 2)
+            call.debug("%s Sensor classes loaded successfully: %s",
+                       3, ['EP1', 'EP2', 'EP3'])
         ]
 
     def test_discover_sensors(self):
 
+        class Class1(object):
+
+            def sensors_present(self):
+                pass
+
+        class Class2(object):
+
+            def sensors_present(self):
+                pass
+
+        class Class3(object):
+
+            def sensors_present(self):
+                pass
+
+        class Class4(object):
+
+            def sensors_present(self):
+                pass
+
         def se_exc(s):
             raise RuntimeError()
 
-        mock_cls1 = Mock()
+        mock_cls1 = Mock(spec=Class1)
         mock_cls1.sensors_present.return_value = True
-        mock_cls2 = Mock()
-        mock_cls2.sensors_present.return_value = False
-        mock_cls3 = Mock()
-        mock_cls3.sensors_present.side_effect = se_exc
+        mock1 = Mock(spec=Class1)
+        mock1.return_value = mock_cls1
 
-        classes = [mock_cls1, mock_cls2, mock_cls3]
+        mock_cls2 = Mock(spec=Class2)
+        mock_cls2.sensors_present.return_value = False
+        mock2 = Mock(spec=Class2)
+        mock2.return_value = mock_cls2
+
+        mock_cls3 = Mock(spec=Class3)
+        mock_cls3.sensors_present.side_effect = se_exc
+        mock3 = Mock(spec=Class3)
+        mock3.return_value = mock_cls3
+
+        mock4 = Mock(spec=Class4)
+        mock4.side_effect = se_exc
+
+        classes = [mock1, mock2, mock3, mock4]
+
+        cls_args = {'Class1': {'foo': 'bar'}}
+
         with patch('%s.logger' % pbm, autospec=True) as mock_logger:
             with patch('%s._sensor_classes' % pb, autospec=True) as m_classes:
                 m_classes.return_value = classes
-                res = self.cls.discover_sensors()
+                res = self.cls.discover_sensors(class_args=cls_args)
         assert res == [mock_cls1]
         assert m_classes.mock_calls == [call(self.cls)]
+        assert mock_cls1.mock_calls == [call.sensors_present()]
+        assert mock1.mock_calls == [
+            call(foo='bar'),
+            call().sensors_present()
+        ]
         assert mock_logger.mock_calls == [
             call.debug('Checking sensor classes for sensors...'),
             call.info('Sensor class %s.%s reports sensors present',
-                      'mock.mock', 'Mock'),
-            call.exception('Exception while discovering sensors via %s.%s',
-                           'mock.mock', 'Mock'),
+                      'rpymostat_sensor.tests.test_sensor_daemon', 'Class1'),
+            call.debug('Exception while discovering sensors via %s.%s',
+                       'rpymostat_sensor.tests.test_sensor_daemon',
+                       'Class3', exc_info=1),
+            call.debug('Exception while instantiating sensor class %s with '
+                       'kwargs=%s', 'Class4', {}, exc_info=1),
             call.debug('Discovered %d sensor classes with sensors present', 1)
         ]
 

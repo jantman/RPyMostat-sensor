@@ -37,8 +37,12 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 
 import sys
 import logging
+import argparse
+import pytest
 
-from rpymostat_sensor.runner import console_entry_point, Runner
+from rpymostat_sensor.runner import (
+    console_entry_point, Runner, StoreKeySubKeyValue
+)
 
 # https://code.google.com/p/mock/issues/detail?id=249
 # py>=3.4 should use unittest.mock not the mock package on pypi
@@ -52,6 +56,74 @@ else:
 
 pbm = 'rpymostat_sensor.runner'
 pb = '%s.Runner' % pbm
+
+
+class TestStoreKeySubKeyValue(object):
+
+    def test_argparse_works(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--foo', action='store', type=str)
+        res = parser.parse_args(['--foo=bar'])
+        assert res.foo == 'bar'
+
+    def test_long(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--one', action=StoreKeySubKeyValue)
+        res = parser.parse_args(['--one=foo=bar=baz'])
+        assert res.one == {'foo': {'bar': 'baz'}}
+
+    def test_short(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('-o', '--one', action=StoreKeySubKeyValue)
+        res = parser.parse_args(['-o', 'foo=bar=baz'])
+        assert res.one == {'foo': {'bar': 'baz'}}
+
+    def test_multi_long(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('-o', '--one', action=StoreKeySubKeyValue)
+        res = parser.parse_args(['--one=foo=bar=baz', '--one=other=k=v'])
+        assert res.one == {'foo': {'bar': 'baz'}, 'other': {'k': 'v'}}
+
+    def test_multi_short(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('-o', '--one', action=StoreKeySubKeyValue)
+        res = parser.parse_args(['-o', 'foo=bar=baz', '-o', 'other=k=v'])
+        assert res.one == {'foo': {'bar': 'baz'}, 'other': {'k': 'v'}}
+
+    def test_no_equals(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('-o', '--one', action=StoreKeySubKeyValue)
+        with pytest.raises(SystemExit) as excinfo:
+            parser.parse_args(['-o', 'foobar'])
+        if sys.version_info[0] > 2:
+            msg = excinfo.value.args[0]
+        else:
+            msg = excinfo.value.message
+        assert msg == 2
+
+    def test_one_equals(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('-o', '--one', action=StoreKeySubKeyValue)
+        with pytest.raises(SystemExit) as excinfo:
+            parser.parse_args(['-o', 'foobar=baz'])
+        if sys.version_info[0] > 2:
+            msg = excinfo.value.args[0]
+        else:
+            msg = excinfo.value.message
+        assert msg == 2
+
+    def test_quoted(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('-o', '--one', action=StoreKeySubKeyValue)
+        res = parser.parse_args([
+            '-o',
+            '"foo some"="bar other"=baz',
+            '--one="baz other"="foo subkey"=blam'
+        ])
+        assert res.one == {
+            'foo some': {'bar other': 'baz'},
+            'baz other': {'foo subkey': 'blam'}
+        }
 
 
 class TestConsoleEntryPoint(object):
@@ -99,6 +171,17 @@ class TestRunner(object):
                                 default=60.0, type=float,
                                 help='Float number of seconds to sleep '
                                 'between sensor poll/POST cycles'),
+            call().add_argument('-l', '--list-sensor-classes',
+                                dest='list_classes', default=False,
+                                action='store_true',
+                                help='list all known sensor classes and '
+                                'their arguments, then exit'),
+            call().add_argument('-c', '--sensor-class-arg', dest='class_args',
+                                action=StoreKeySubKeyValue,
+                                help='Provide an argument for a specific '
+                                'sensor class, in the form '
+                                'ClassName=arg_name=value; see -l for list '
+                                'of classes and their arguments'),
             call().parse_args(argv)
         ]
 
@@ -118,7 +201,10 @@ class TestRunner(object):
             '-a', 'foo.bar.baz',
             '--engine-port=1234',
             '--dummy',
-            '-i', '12.34'
+            '-i', '12.34',
+            '-c', 'foo=bar=baz',
+            '--sensor-class-arg=foo=bar2=baz2',
+            '--sensor-class-arg=blam=blarg=blamm'
         ])
         assert res.verbose == 1
         assert res.dry_run is True
@@ -126,6 +212,13 @@ class TestRunner(object):
         assert res.engine_port == 1234
         assert res.dummy is True
         assert res.interval == 12.34
+        assert res.class_args == {
+            'foo': {
+                'bar': 'baz',
+                'bar2': 'baz2'
+            },
+            'blam': {'blarg': 'blamm'}
+        }
 
     def test_parse_args_verbose2(self):
         res = self.cls.parse_args(['-vv'])
@@ -143,7 +236,8 @@ class TestRunner(object):
             engine_addr=None,
             engine_port=8088,
             dummy=False,
-            interval=60.0
+            interval=60.0,
+            class_args={}
         )
         with patch('%s.logger' % pbm, autospec=True) as mock_logger:
             with patch.multiple(
@@ -162,7 +256,8 @@ class TestRunner(object):
                 dummy_data=False,
                 engine_port=8088,
                 engine_addr=None,
-                interval=60.0
+                interval=60.0,
+                class_args={}
             ),
             call().run()
         ]
@@ -174,7 +269,8 @@ class TestRunner(object):
             engine_addr='foo.bar.baz',
             engine_port=5678,
             dummy=True,
-            interval=123.45
+            interval=123.45,
+            class_args={'foo': {'bar': 'baz'}}
         )
         with patch('%s.logger' % pbm, autospec=True) as mock_logger:
             with patch.multiple(
@@ -195,7 +291,8 @@ class TestRunner(object):
                 dummy_data=True,
                 engine_port=5678,
                 engine_addr='foo.bar.baz',
-                interval=123.45
+                interval=123.45,
+                class_args={'foo': {'bar': 'baz'}}
             ),
             call().run()
         ]
@@ -207,7 +304,8 @@ class TestRunner(object):
             engine_addr=None,
             engine_port=8088,
             dummy=False,
-            interval=60.0
+            interval=60.0,
+            class_args={}
         )
         with patch('%s.logger' % pbm, autospec=True) as mock_logger:
             with patch.multiple(
@@ -240,7 +338,8 @@ class TestRunner(object):
                 dummy_data=False,
                 engine_port=8088,
                 engine_addr=None,
-                interval=60.0
+                interval=60.0,
+                class_args={}
             ),
             call().run()
         ]

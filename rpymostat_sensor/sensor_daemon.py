@@ -48,7 +48,8 @@ logger = logging.getLogger(__name__)
 class SensorDaemon(object):
 
     def __init__(self, dry_run=False, dummy_data=False, engine_port=8088,
-                 engine_addr=None, interval=60.0):
+                 engine_addr=None, interval=60.0, list_classes=False,
+                 class_args={}):
         """
         Initialize the Sensor Daemon, to read temperatures and send them
         to the Engine API.
@@ -65,7 +66,16 @@ class SensorDaemon(object):
         :type engine_addr: str
         :param interval: how many seconds to sleep between sensor poll/POST
         :type interval: float
+        :param list_classes: if True, list all discovered classes and their
+          args, then raise SystemExit()
+        :type list_classes: bool
+        :param class_args: dict of optional arguments to pass to sensor classes
+          init method; of the form {'ClassName': {'arg_name': 'value'}}
+        :type class_args: dict
         """
+        if list_classes:
+            self.list_classes()
+            raise SystemExit()
         self.dry_run = dry_run
         self.dummy_data = dummy_data
         self.engine_port = engine_port
@@ -77,7 +87,7 @@ class SensorDaemon(object):
             logger.warning("DRY RUN MODE - will not POST data to Engine.")
         if self.engine_addr is None:
             self.engine_addr, self.engine_port = self.discover_engine()
-        self.sensors = self.discover_sensors()
+        self.sensors = self.discover_sensors(class_args)
         if len(self.sensors) < 1:
             logger.critical("ERROR - no sensors discovered.")
             raise SystemExit(1)
@@ -98,24 +108,28 @@ class SensorDaemon(object):
         Read data from all sensors and send it to the Engine API.
         """
         logger.debug('Reading sensors')
-        data = {'host_id': self.host_id, 'sensors': []}
+        data = {'host_id': self.host_id, 'sensors': {}}
         for sensor in self.sensors:
-            val = None
             try:
-                val = sensor.read()
-                data['sensors'].append(val)
+                for s_id, s_data in sensor.read().iteritems():
+                    data['sensors'][s_id] = s_data
             except:
                 logger.exception('Exception reading sensor %s',
                                  sensor.__class__.__name__)
         url = 'http://%s:%s/v1/sensors/update' % (
             self.engine_addr, self.engine_port
         )
-        logger.debug('POSTing sensor data to %s: %s', url, data)
-        r = requests.post(url, json=data)
-        if r.status_code != 202 and r.status_code != 201:
-            logger.error('Error POSTing sensor data; got status code %s: %s',
-                         r.status_code, r.text)
-            return
+        try:
+            logger.debug('POSTing sensor data to %s: %s', url, data)
+            r = requests.post(url, json=data)
+            if r.status_code != 202 and r.status_code != 201:
+                logger.error('Error POSTing sensor data; got status code %s: '
+                             '%s', r.status_code, r.text)
+                return
+        except:
+            logger.exception('Exception caught when trying to POST data to '
+                             'Engine; will try again at next interval.')
+            return None
         logger.info('POSTed sensor data to Engine')
 
     def discover_engine(self):
@@ -157,10 +171,6 @@ class SensorDaemon(object):
         :return: list of :py:class:`~.BaseSensor` instances
         :rtype: list
         """
-        if self.dummy_data:
-            logger.warning('Running with --dummy - only DummySensor() will '
-                           'be loaded')
-            return [DummySensor()]
         logger.debug("Loading sensor classes from entry points.")
         classes = []
         for entry_point in pkg_resources.iter_entry_points('rpymostat.sensors'):
@@ -168,35 +178,52 @@ class SensorDaemon(object):
                 logger.debug("Trying to load sensor class from entry point: %s",
                              entry_point.name)
                 obj = entry_point.load()
-                klass = obj()
-                classes.append(klass)
+                classes.append(obj)
             except:
-                logger.exception('Exception raised when loading entry point %s',
-                                 entry_point.name)
-        logger.debug("%s Sensor classes loaded successfully", len(classes))
+                logger.debug('Exception raised when loading entry point %s',
+                             entry_point.name, exc_info=1)
+        logger.debug("%s Sensor classes loaded successfully: %s", len(classes),
+                     [c.__name__ for c in classes])
         return classes
 
-    def discover_sensors(self):
+    def discover_sensors(self, class_args={}):
         """
         Returns a list of :py:class:`~.BaseSensor` class instances that have
         reported sensors present.
 
+        :param class_args: dict of optional arguments to pass to sensor classes
+          init method; of the form {'ClassName': {'arg_name': 'value'}}
+        :type class_args: dict
         :return: list of :py:class:`~.BaseSensor` class instances
         :rtype: list
         """
+        if self.dummy_data:
+            logger.warning('Running with --dummy - only DummySensor() will '
+                           'be loaded')
+            return [DummySensor()]
         have_sensors = []
         logger.debug("Checking sensor classes for sensors...")
         for klass in self._sensor_classes():
+            kwargs = {}
+            if klass.__class__.__name__ in class_args:
+                kwargs = class_args[klass.__class__.__name__]
             try:
-                if klass.sensors_present():
-                    logger.info("Sensor class %s.%s reports sensors present",
-                                klass.__class__.__module__,
-                                klass.__class__.__name__)
-                    have_sensors.append(klass)
+                cls = klass(**kwargs)
             except:
-                logger.exception('Exception while discovering sensors via '
-                                 '%s.%s', klass.__class__.__module__,
-                                 klass.__class__.__name__)
+                logger.debug('Exception while instantiating sensor class %s '
+                             'with kwargs=%s', klass.__class__.__name__, kwargs,
+                             exc_info=1)
+                continue
+            try:
+                if cls.sensors_present():
+                    logger.info("Sensor class %s.%s reports sensors present",
+                                cls.__class__.__module__,
+                                cls.__class__.__name__)
+                    have_sensors.append(cls)
+            except:
+                logger.debug('Exception while discovering sensors via '
+                             '%s.%s', cls.__class__.__module__,
+                             cls.__class__.__name__, exc_info=1)
         logger.debug("Discovered %d sensor classes with sensors present",
                      len(have_sensors))
         return have_sensors

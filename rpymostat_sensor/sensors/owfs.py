@@ -35,33 +35,202 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 ##################################################################################
 """
 
-import random
-
+import os
+import logging
+import re
 from rpymostat_sensor.sensors.base import BaseSensor
 
+logger = logging.getLogger(__name__)
 
-class UsbOneWireSensor(BaseSensor):
+
+class OWFS(BaseSensor):
     """
-    Dummy sensor class that returns random temperatures.
+    Sensor class to read OWFS sensors. Currently only tested with DS18S20.
     """
+
+    # list of filesystem paths to check when attempting to discover OWFS
+    owfs_paths = [
+        '/run/owfs',
+        '/owfs',
+        '/mnt/owfs',
+        '/var/owfs',
+        '/1wire',
+        '/var/1wire',
+        '/mnt/1wire',
+        '/run/1wire'
+    ]
+
+    sensor_dir_re = re.compile(r'^[0-9a-fA-F]+\.[0-9a-fA-F]+$')
+
+    def __init__(self, owfs_path=None):
+        """
+        Initialize sensor class to read OWFS sensors.
+
+        :param owfs_path: Absolute path to the OWFS mountpoint. If not
+          specified, some common defaults will be tried.
+        :type owfs_path: str
+        """
+        super(OWFS)
+        if owfs_path is None:
+            owfs_path = self._discover_owfs()
+        else:
+            logger.debug('Using specified owfs_path: %s', owfs_path)
+        if owfs_path is None:
+            raise RuntimeError('Could not discover OWFS mountpoint and '
+                               'owfs_path class argument not specified.')
+        self.owfs_path = owfs_path
+        self.temp_scale = self._get_temp_scale(self.owfs_path)
+        logger.debug('Found OWFS path as %s (temperature scale: %s)',
+                     self.owfs_path, self.temp_scale)
+
+    def _discover_owfs(self):
+        """
+        If ``owfs_path`` is not specified for :py:meth:`.__init__`, attempt
+        to find an OWFS mounted at some of the common paths. If one is found,
+        return the path to it. If not, return None.
+
+        :return: path to OWFS mountpoint or None
+        """
+        logger.debug('Attempting to find OWFS path/mountpoint')
+        for path in self.owfs_paths:
+            if not os.path.exists(path):
+                logger.debug('Path %s does not exist; skipping', path)
+                continue
+            if not os.path.exists(
+                    os.path.join(path, 'settings', 'units', 'temperature_scale')
+            ):
+                logger.debug('Path %s exists but does not appear to have '
+                             'OWFS mounted', path)
+                continue
+            logger.info('Found OWFS mounted at: %s', path)
+            return path
+        return None
+
+    def _get_temp_scale(self, owfs_path):
+        """
+        Read and return the temperature_scale setting in use by OWFS mounted at
+        owfs_path.
+
+        :param owfs_path: OWFS mountpoint
+        :type owfs_path: str
+        :return: temperature scale in use ('C', 'F', 'K', or 'R')
+        :rtype: str
+        """
+        scale_path = os.path.join(
+            owfs_path, 'settings', 'units', 'temperature_scale'
+        )
+        with open(scale_path, 'r') as fh:
+            scale = fh.read().strip()
+        return scale
 
     def sensors_present(self):
         """
-        Discover a single dummy temperature sensor.
+        Determine whethere there are OWFS temperature sensors present or not.
 
         :return: True because it's always here
         :rtype: bool
         """
-        return True
+        sensors = self._find_sensors()
+        logger.debug('Found %d sensors present: %s', len(sensors), sensors)
+        if len(sensors) > 0:
+            return True
+        return False
+
+    def _find_sensors(self):
+        """
+        Find all OWFS temperature sensors present. Return a list of dicts of
+        information about them. Dicts have the format:
+
+        {
+            'temp_path': 'absolute path to read temperature from',
+            'alias': 'sensor alias, if set',
+            'address': 'sensor address',
+            'type': 'sensor type'
+        }
+
+        The only *required* key in the dict is ``temp_path``.
+
+        :return: list of dicts describing present temperature sensors.
+        :rtype: dict
+        """
+        sensors = []
+        for subdir in os.listdir(self.owfs_path):
+            if not os.path.isdir(os.path.join(self.owfs_path, subdir)):
+                continue
+            if not self.sensor_dir_re.match(subdir):
+                continue
+            temp_path = os.path.join(self.owfs_path, subdir, 'temperature')
+            if not os.path.exists(temp_path):
+                continue
+            logger.debug('found temperature sensor at: %s', temp_path)
+            d = {'temp_path': temp_path}
+            with open(
+                    os.path.join(self.owfs_path, subdir, 'address'), 'r'
+            ) as fh:
+                d['address'] = fh.read().strip()
+            if os.path.exists(os.path.join(self.owfs_path, subdir, 'alias')):
+                with open(
+                        os.path.join(self.owfs_path, subdir, 'alias'), 'r'
+                ) as fh:
+                    tmp = fh.read().strip()
+                    if tmp != '':
+                        d['alias'] = tmp
+            if os.path.exists(os.path.join(self.owfs_path, subdir, 'type')):
+                with open(
+                        os.path.join(self.owfs_path, subdir, 'type'), 'r'
+                ) as fh:
+                    d['type'] = fh.read().strip()
+            sensors.append(d)
+        return sensors
 
     def read(self):
         """
-        Return a random float temperature in the range 18-27 C.
+        Read all present temperature sensors.
 
-        :param sensor_id: the sensor ID to read (key from the dict returned
-          by :py:meth:`~.discover`)
-        :type sensor_id: str
-        :return: random temperature in degrees Celsius
-        :rtype: float
+        Returns a dict of sensor unique IDs (keys) to dicts of sensor
+        information.
+
+        Return dict format:
+
+        {
+            'unique_id_1': {
+                'type': 'sensor_type_string',
+                'value': 1.234,
+                'alias': 'str',
+                'extra': ''
+            },
+            ...
+        }
+
+        Each dict key is a globally-unique sensor ID. Each value is a dict
+        with the following keys:
+
+        - type: (str) sensor type
+        - value: (float) current temperature in degress Celsius, or None if
+          there is an error reading it.
+        - alias: (str) a human-readable alias/name for the sensor, if present
+        - extra: (str) any extra information about the sensor
+
+        :return: dict of sensor values and information.
+        :rtype: dict
         """
-        return random.randrange(18, 27, 0.125)
+        res = {}
+        sensors = self._find_sensors()
+        for sensor in sensors:
+            data = {'type': sensor['type']}
+            if 'alias' in sensor and sensor['alias'] is not None:
+                data['alias'] = sensor['alias']
+            try:
+                logger.debug('Reading temperature from sensor %s at %s',
+                             sensor['address'], sensor['temp_path'])
+                with open(sensor['temp_path'], 'r') as fh:
+                    temp = fh.read().strip()
+                data['value'] = float(temp)
+                logger.debug('Got temperature of %s from %s', data['value'],
+                             sensor['address'])
+            except:
+                logger.debug('Exception reading from sensor %s',
+                             sensor['address'], exc_info=1)
+                data['value'] = None
+            res[sensor['address']] = data
+        return res
