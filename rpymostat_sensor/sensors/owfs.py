@@ -73,6 +73,7 @@ class OWFS(BaseSensor):
         super(OWFS)
         if owfs_path is None:
             owfs_path = self._discover_owfs()
+            logger.debug('Discovered OWFS path as: %s', owfs_path)
         else:
             logger.debug('Using specified owfs_path: %s', owfs_path)
         if owfs_path is None:
@@ -91,7 +92,8 @@ class OWFS(BaseSensor):
 
         :return: path to OWFS mountpoint or None
         """
-        logger.debug('Attempting to find OWFS path/mountpoint')
+        logger.debug('Attempting to find OWFS path/mountpoint from list of '
+                     'common options: %s', self.owfs_paths)
         for path in self.owfs_paths:
             if not os.path.exists(path):
                 logger.debug('Path %s does not exist; skipping', path)
@@ -104,6 +106,7 @@ class OWFS(BaseSensor):
                 continue
             logger.info('Found OWFS mounted at: %s', path)
             return path
+        logger.debug('Could not discover any OWFS at known mountpoints')
         return None
 
     def _get_temp_scale(self, owfs_path):

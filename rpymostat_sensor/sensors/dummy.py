@@ -45,6 +45,15 @@ class DummySensor(BaseSensor):
     Dummy sensor class that returns random temperatures.
     """
 
+    def __init__(self, host_id):
+        """
+        Initialize dummy sensor.
+
+        :param host_id: unique ID of this host.
+        :type host_id: str
+        """
+        self.host_id = host_id
+
     def sensors_present(self):
         """
         Discover a single dummy temperature sensor.
@@ -56,16 +65,29 @@ class DummySensor(BaseSensor):
 
     def read(self):
         """
-        Return a random float temperature in the range 18-27 C.
+        Returns a dict, where the value is a pseudo-random float in the range
+        of 18 to 26.75 (inclusive) incremented by .25.
 
-        :param sensor_id: the sensor ID to read (key from the dict returned
-          by :py:meth:`~.discover`)
-        :type sensor_id: str
-        :return: random temperature in degrees Celsius
-        :rtype: float
+        {
+            '<self.host_id>_dummy1': {
+                'type': 'dummy',
+                'value': <value>,
+                'alias': 'dummy'
+            }
+        }
+
+        :return: dict of sensor values and information.
+        :rtype: dict
         """
         choices = []
         for x in range(18, 27):
-            for y in [0, 0.250, 0.500, 0.750]:
+            for y in [0, 0.25, 0.5, 0.75]:
                 choices.append(x + y)
-        return random.choice(choices)
+        val = random.choice(choices)
+        return {
+            '%s_dummy1' % self.host_id: {
+                'type': 'dummy',
+                'value': val,
+                'alias': 'dummy'
+            }
+        }

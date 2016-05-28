@@ -154,16 +154,6 @@ class SensorDaemon(object):
         """
         return 'myhostid'
 
-    def dummy_sensor(self):
-        """
-        Return a list like :py:meth:`~.discover_sensors` that only has a
-        :py:class:`~.DummySensor` in it.
-
-        :return: list with a :py:class:`~.DummySensor` instance
-        :rtype: list
-        """
-        return [DummySensor()]
-
     def _sensor_classes(self):
         """
         Find and instantiate all :py:class:`~.BaseSensor` classes.
@@ -200,7 +190,7 @@ class SensorDaemon(object):
         if self.dummy_data:
             logger.warning('Running with --dummy - only DummySensor() will '
                            'be loaded')
-            return [DummySensor()]
+            return [DummySensor(self.host_id)]
         have_sensors = []
         logger.debug("Checking sensor classes for sensors...")
         for klass in self._sensor_classes():
@@ -227,3 +217,10 @@ class SensorDaemon(object):
         logger.debug("Discovered %d sensor classes with sensors present",
                      len(have_sensors))
         return have_sensors
+
+    def list_classes(self):
+        """
+        Print a list of sensor class names, along with their _description
+        attributes (if present) and any arguments they accept.
+        """
+        pass

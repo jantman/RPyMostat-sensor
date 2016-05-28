@@ -136,6 +136,7 @@ class Runner(object):
             logger.setLevel(logging.DEBUG)
         if args.list_classes is True:
             d = SensorDaemon(list_classes=True)
+            raise SystemExit()
         d = SensorDaemon(
             dry_run=args.dry_run,
             dummy_data=args.dummy,

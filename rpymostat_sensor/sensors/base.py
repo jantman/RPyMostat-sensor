@@ -53,10 +53,7 @@ class BaseSensor(object):
 
     # One-line string description of the type of sensor this class supports,
     # for use in generated documentation.
-    _sensor_type = "Unknown"
-
-    def __init__(self):
-        pass
+    _description = "Unknown"
 
     def get_varnames(self):
         """
@@ -95,11 +92,33 @@ class BaseSensor(object):
     @abc.abstractmethod
     def read(self):
         """
-        Read the current value of all sensors. For clarity, the value should
-        always be a float degrees Celsius. Also returns metadata about them.
-        Return value should be a JSON-serializable dict.
+        Read all present temperature sensors.
 
-        :return: unknown
-        :rtype: unknown
+        Returns a dict of sensor unique IDs (keys) to dicts of sensor
+        information.
+
+        Return dict format:
+
+        {
+            'unique_id_1': {
+                'type': 'sensor_type_string',
+                'value': 1.234,
+                'alias': 'str',
+                'extra': ''
+            },
+            ...
+        }
+
+        Each dict key is a globally-unique sensor ID. Each value is a dict
+        with the following keys:
+
+        - type: (str) sensor type
+        - value: (float) current temperature in degress Celsius, or None if
+          there is an error reading it.
+        - alias: (str) a human-readable alias/name for the sensor, if present
+        - extra: (str) any extra information about the sensor
+
+        :return: dict of sensor values and information.
+        :rtype: dict
         """
         raise NotImplementedError()
