@@ -136,6 +136,25 @@ class TestConsoleEntryPoint(object):
             call().console_entry_point()
         ]
 
+    def test_console_entry_point_keyboard_interrupt(self):
+
+        def se_exc():
+            raise KeyboardInterrupt()
+
+        with patch(pb, autospec=True) as mock_runner:
+            mock_runner.return_value.console_entry_point.side_effect = se_exc
+
+            with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+                with pytest.raises(SystemExit):
+                    console_entry_point()
+        assert mock_runner.mock_calls == [
+            call(),
+            call().console_entry_point()
+        ]
+        assert mock_logger.mock_calls == [
+            call.warning('Exiting on keyboard interrupt.')
+        ]
+
 
 class TestRunner(object):
 
@@ -260,6 +279,33 @@ class TestRunner(object):
                 class_args={}
             ),
             call().run()
+        ]
+
+    def test_console_entry_point_list_sensors(self):
+        mock_args = Mock(
+            verbose=0,
+            dry_run=False,
+            engine_addr=None,
+            engine_port=8088,
+            dummy=False,
+            interval=60.0,
+            class_args={},
+            list_classes=True
+        )
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch.multiple(
+                pb,
+                autospec=True,
+                parse_args=DEFAULT,
+            ) as mocks:
+                mocks['parse_args'].return_value = mock_args
+                with patch('%s.SensorDaemon' % pbm,
+                           autospec=True) as mock_daemon:
+                    with pytest.raises(SystemExit):
+                        self.cls.console_entry_point()
+        assert mock_logger.mock_calls == []
+        assert mock_daemon.mock_calls == [
+            call(list_classes=True)
         ]
 
     def test_console_entry_point_verbose1(self):

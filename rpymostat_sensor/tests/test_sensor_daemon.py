@@ -41,6 +41,7 @@ import pkg_resources
 
 from rpymostat_sensor.sensor_daemon import SensorDaemon
 from rpymostat_sensor.sensors.dummy import DummySensor
+from rpymostat_sensor.sensors.base import BaseSensor
 
 # https://code.google.com/p/mock/issues/detail?id=249
 # py>=3.4 should use unittest.mock not the mock package on pypi
@@ -82,6 +83,7 @@ class TestSensorDaemon(object):
                 find_host_id=DEFAULT,
                 discover_engine=DEFAULT,
                 discover_sensors=DEFAULT,
+                list_classes=DEFAULT,
             ) as mocks:
                 mocks['find_host_id'].return_value = 'myhostid'
                 mocks['discover_engine'].return_value = ('foo.bar.baz', 1234)
@@ -100,6 +102,25 @@ class TestSensorDaemon(object):
         assert mocks['find_host_id'].mock_calls == [call(cls)]
         assert mocks['discover_engine'].mock_calls == [call(cls)]
         assert mocks['discover_sensors'].mock_calls == [call(cls, {})]
+        assert mocks['list_classes'].mock_calls == []
+
+    def test_init_list_classes(self):
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch.multiple(
+                pb,
+                autospec=True,
+                find_host_id=DEFAULT,
+                discover_engine=DEFAULT,
+                discover_sensors=DEFAULT,
+                list_classes=DEFAULT,
+            ) as mocks:
+                with pytest.raises(SystemExit):
+                    SensorDaemon(list_classes=True)
+        assert mock_logger.mock_calls == []
+        assert mocks['find_host_id'].mock_calls == []
+        assert mocks['discover_engine'].mock_calls == []
+        assert mocks['discover_sensors'].mock_calls == []
+        assert mocks['list_classes'].call_count == 1
 
     def test_init_nondefault(self):
         dummy = Mock()
@@ -110,6 +131,7 @@ class TestSensorDaemon(object):
                 find_host_id=DEFAULT,
                 discover_engine=DEFAULT,
                 discover_sensors=DEFAULT,
+                list_classes=DEFAULT,
             ) as mocks:
                 mocks['find_host_id'].return_value = 'myhostid'
                 mocks['discover_engine'].return_value = ('foo.bar.baz', 1234)
@@ -138,6 +160,7 @@ class TestSensorDaemon(object):
         assert mocks['discover_sensors'].mock_calls == [
             call(cls, {'foo': 'bar'})
         ]
+        assert mocks['list_classes'].mock_calls == []
 
     def test_init_no_sensors(self):
         with patch('%s.logger' % pbm, autospec=True) as mock_logger:
@@ -147,6 +170,7 @@ class TestSensorDaemon(object):
                 find_host_id=DEFAULT,
                 discover_engine=DEFAULT,
                 discover_sensors=DEFAULT,
+                list_classes=DEFAULT,
             ) as mocks:
                 mocks['find_host_id'].return_value = 'myhostid'
                 mocks['discover_engine'].return_value = ('foo.bar.baz', 1234)
@@ -160,6 +184,7 @@ class TestSensorDaemon(object):
         assert mocks['discover_engine'].call_count == 1
         assert mocks['discover_sensors'].call_count == 1
         assert excinfo.value.code == 1
+        assert mocks['list_classes'].mock_calls == []
 
     def test_run(self):
         def se_ras(klass):
@@ -193,6 +218,9 @@ class TestSensorDaemon(object):
 
     def test_sensor_classes(self):
 
+        def se_exc(*args, **kwargs):
+            raise Exception()
+
         class EP1(object):
             name = 'EP1'
 
@@ -214,7 +242,11 @@ class TestSensorDaemon(object):
         type(mock_ep3).name = 'ep3'
         mock_ep3.load.return_value = EP3
 
-        entry_points = [mock_ep1, mock_ep2, mock_ep3]
+        mock_ep4 = Mock(spec_set=pkg_resources.EntryPoint)
+        type(mock_ep4).name = 'ep4'
+        mock_ep4.load.side_effect = se_exc
+
+        entry_points = [mock_ep1, mock_ep2, mock_ep3, mock_ep4]
 
         with patch('%s.DummySensor' % pbm, autospec=True) as mock_dummy:
             with patch('%s.logger' % pbm, autospec=True) as mock_logger:
@@ -233,6 +265,10 @@ class TestSensorDaemon(object):
                        'ep1'),
             call.debug('Trying to load sensor class from entry point: %s',
                        'ep3'),
+            call.debug('Trying to load sensor class from entry point: %s',
+                       'ep4'),
+            call.debug('Exception raised when loading entry point %s',
+                       'ep4', exc_info=1),
             call.debug("%s Sensor classes loaded successfully: %s",
                        3, ['EP1', 'EP2', 'EP3'])
         ]
@@ -307,10 +343,129 @@ class TestSensorDaemon(object):
             call.debug('Discovered %d sensor classes with sensors present', 1)
         ]
 
-    def test_dummy_sensor(self):
-        res = self.cls.dummy_sensor()
+    def test_discover_sensors_dummy(self):
+        self.cls.dummy_data = True
+
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch('%s._sensor_classes' % pb, autospec=True) as m_classes:
+                res = self.cls.discover_sensors()
+        assert m_classes.mock_calls == []
         assert len(res) == 1
         assert isinstance(res[0], DummySensor)
+        assert res[0].host_id == 'myhostid'
+        assert mock_logger.mock_calls == [
+            call.warning('Running with --dummy - only DummySensor() will be '
+                         'loaded')
+        ]
 
     def test_read_and_send(self):
-        pass
+
+        def se_exc():
+            raise Exception()
+
+        s1 = Mock(spec_set=BaseSensor)
+        s1.read.return_value = {
+            'sensor1': {'data': 's1data'},
+            'sensor2': {'data': 's2data'},
+        }
+
+        s2 = Mock(spec_set=BaseSensor)
+        s2.read.side_effect = se_exc
+
+        s3 = Mock(spec_set=BaseSensor)
+        s3.read.return_value = {
+            'sensor31': {'data': 's31data'},
+            'sensor32': {'data': 's32data'},
+        }
+
+        self.cls.sensors = [s1, s2, s3]
+
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch('%s.requests.post' % pbm, autospec=True) as mock_post:
+                mock_post.return_value = Mock(status_code=201)
+                self.cls.read_and_send()
+        url = 'http://foo.bar.baz:1234/v1/sensors/update'
+        data = {
+             'host_id': 'myhostid',
+             'sensors': {
+                 'sensor1': {'data': 's1data'},
+                 'sensor2': {'data': 's2data'},
+                 'sensor31': {'data': 's31data'},
+                 'sensor32': {'data': 's32data'},
+             }
+         }
+        assert mock_post.mock_calls == [
+            call(url, json=data)
+        ]
+        assert mock_logger.mock_calls == [
+            call.debug('Reading sensors'),
+            call.exception('Exception reading sensor %s', 'BaseSensor'),
+            call.debug('POSTing sensor data to %s: %s', url, data),
+            call.info('POSTed sensor data to Engine')
+        ]
+
+    def test_read_and_send_bad_status_code(self):
+        s1 = Mock(spec_set=BaseSensor)
+        s1.read.return_value = {
+            'sensor1': {'data': 's1data'},
+            'sensor2': {'data': 's2data'},
+        }
+
+        self.cls.sensors = [s1]
+
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch('%s.requests.post' % pbm, autospec=True) as mock_post:
+                mock_post.return_value = Mock(status_code=404, text='foo')
+                self.cls.read_and_send()
+        url = 'http://foo.bar.baz:1234/v1/sensors/update'
+        data = {
+             'host_id': 'myhostid',
+             'sensors': {
+                 'sensor1': {'data': 's1data'},
+                 'sensor2': {'data': 's2data'}
+             }
+         }
+        assert mock_post.mock_calls == [
+            call(url, json=data)
+        ]
+        assert mock_logger.mock_calls == [
+            call.debug('Reading sensors'),
+            call.debug('POSTing sensor data to %s: %s', url, data),
+            call.error('Error POSTing sensor data; got status code %s: %s',
+                       404, 'foo')
+        ]
+
+    def test_read_and_send_exception(self):
+
+        def se_exc(*args, **kwargs):
+            raise Exception()
+
+        s1 = Mock(spec_set=BaseSensor)
+        s1.read.return_value = {
+            'sensor1': {'data': 's1data'},
+            'sensor2': {'data': 's2data'},
+        }
+
+        self.cls.sensors = [s1]
+
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch('%s.requests.post' % pbm, autospec=True) as mock_post:
+                mock_post.side_effect = se_exc
+                self.cls.read_and_send()
+        url = 'http://foo.bar.baz:1234/v1/sensors/update'
+        data = {
+             'host_id': 'myhostid',
+             'sensors': {
+                 'sensor1': {'data': 's1data'},
+                 'sensor2': {'data': 's2data'}
+             }
+         }
+        assert mock_post.mock_calls == [
+            call(url, json=data)
+        ]
+        assert mock_logger.mock_calls == [
+            call.debug('Reading sensors'),
+            call.debug('POSTing sensor data to %s: %s', url, data),
+            call.exception('Exception caught when trying to POST data to '
+                           'Engine; will try again at next interval.')
+        ]

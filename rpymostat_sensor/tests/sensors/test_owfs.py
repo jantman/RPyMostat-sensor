@@ -36,8 +36,9 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 """
 
 import sys
+import pytest
 
-from rpymostat_sensor.sensors.dummy import DummySensor
+from rpymostat_sensor.sensors.owfs import OWFS
 
 # https://code.google.com/p/mock/issues/detail?id=249
 # py>=3.4 should use unittest.mock not the mock package on pypi
@@ -45,36 +46,171 @@ if (
         sys.version_info[0] < 3 or
         sys.version_info[0] == 3 and sys.version_info[1] < 4
 ):
-    from mock import patch, call, Mock, DEFAULT  # noqa
+    from mock import patch, call, Mock, DEFAULT, mock_open  # noqa
 else:
-    from unittest.mock import patch, call, Mock, DEFAULT  # noqa
+    from unittest.mock import patch, call, Mock, DEFAULT, mock_open  # noqa
 
-pbm = 'rpymostat_sensor.sensors.dummy'
-pb = '%s.DummySensor' % pbm
+pbm = 'rpymostat_sensor.sensors.owfs'
+pb = '%s.OWFS' % pbm
 
 
-class TestDummySensor(object):
+class TestOWFS(object):
 
     def setup(self):
-        self.cls = DummySensor('myhostid')
+        with patch.multiple(
+            pb,
+            _discover_owfs=DEFAULT,
+            _get_temp_scale=DEFAULT,
+        ):
+            self.cls = OWFS()
 
-    def test_sensors_present(self):
-        assert self.cls.sensors_present() is True
+    def test_init_specified_path(self):
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch.multiple(
+                pb,
+                autospec=True,
+                _discover_owfs=DEFAULT,
+                _get_temp_scale=DEFAULT,
+            ) as mocks:
+                mocks['_get_temp_scale'].return_value = 'F'
+                cls = OWFS(owfs_path='/foo/bar')
+        assert mocks['_discover_owfs'].mock_calls == []
+        assert mocks['_get_temp_scale'].mock_calls == [call(cls, '/foo/bar')]
+        assert mock_logger.mock_calls == [
+            call.debug('Using specified owfs_path: %s', '/foo/bar'),
+            call.debug('Found OWFS path as %s (temperature scale: %s)',
+                       '/foo/bar', 'F')
+        ]
+        assert cls.owfs_path == '/foo/bar'
+        assert cls.temp_scale == 'F'
 
-    def test_read(self):
-        with patch('%s.random.choice' % pbm) as mock_choice:
-            mock_choice.return_value = 12.34
-            res = self.cls.read()
-        assert mock_choice.mock_calls == [call(
-            [18, 18.25, 18.5, 18.75, 19, 19.25, 19.5, 19.75, 20, 20.25, 20.5,
-             20.75, 21, 21.25, 21.5, 21.75, 22, 22.25, 22.5, 22.75, 23, 23.25,
-             23.5, 23.75, 24, 24.25, 24.5, 24.75, 25, 25.25, 25.5, 25.75, 26,
-             26.25, 26.5, 26.75]
-        )]
-        assert res == {
-            'myhostid_dummy1': {
-                'type': 'dummy',
-                'value': 12.34,
-                'alias': 'dummy'
-            }
-        }
+    def test_init_discover(self):
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch.multiple(
+                pb,
+                autospec=True,
+                _discover_owfs=DEFAULT,
+                _get_temp_scale=DEFAULT,
+            ) as mocks:
+                mocks['_get_temp_scale'].return_value = 'C'
+                mocks['_discover_owfs'].return_value = '/my/path'
+                cls = OWFS()
+        assert mocks['_discover_owfs'].mock_calls == [call(cls)]
+        assert mocks['_get_temp_scale'].mock_calls == [call(cls, '/my/path')]
+        assert mock_logger.mock_calls == [
+            call.debug('Discovered OWFS path as: %s', '/my/path'),
+            call.debug('Found OWFS path as %s (temperature scale: %s)',
+                       '/my/path', 'C')
+        ]
+        assert cls.owfs_path == '/my/path'
+        assert cls.temp_scale == 'C'
+
+    def test_init_discover_failed(self):
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch.multiple(
+                pb,
+                autospec=True,
+                _discover_owfs=DEFAULT,
+                _get_temp_scale=DEFAULT,
+            ) as mocks:
+                mocks['_get_temp_scale'].return_value = 'C'
+                mocks['_discover_owfs'].return_value = None
+                with pytest.raises(RuntimeError) as excinfo:
+                    OWFS()
+        assert mocks['_discover_owfs'].call_count == 1
+        assert mocks['_get_temp_scale'].mock_calls == []
+        assert mock_logger.mock_calls == [
+            call.debug('Discovered OWFS path as: %s', None)
+        ]
+        if sys.version_info[0] > 2:
+            msg = excinfo.value.args[0]
+        else:
+            msg = excinfo.value.message
+        assert msg == 'Could not discover OWFS mountpoint and owfs_path ' \
+                      'class argument not specified.'
+
+    def test_discover_owfs(self):
+        self.cls.owfs_paths = ['/foo', '/bar', '/baz']
+
+        def se_exists(path):
+            if path.startswith('/baz'):
+                return True
+            if path == '/bar':
+                return True
+            return False
+
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch('%s.os.path.exists' % pbm, autospec=True) as mock_ex:
+                mock_ex.side_effect = se_exists
+                res = self.cls._discover_owfs()
+        assert res == '/baz'
+        assert mock_ex.mock_calls == [
+            call('/foo'),
+            call('/bar'),
+            call('/bar/settings/units/temperature_scale'),
+            call('/baz'),
+            call('/baz/settings/units/temperature_scale')
+        ]
+        assert mock_logger.mock_calls == [
+            call.debug('Attempting to find OWFS path/mountpoint from list '
+                       'of common options: %s', ['/foo', '/bar', '/baz']),
+            call.debug('Path %s does not exist; skipping', '/foo'),
+            call.debug('Path %s exists but does not appear to have OWFS '
+                       'mounted', '/bar'),
+            call.info('Found OWFS mounted at: %s', '/baz')
+        ]
+
+    def test_discover_owfs_none(self):
+        self.cls.owfs_paths = ['/foo', '/bar', '/baz']
+
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch('%s.os.path.exists' % pbm, autospec=True) as mock_ex:
+                mock_ex.return_value = False
+                res = self.cls._discover_owfs()
+        assert res is None
+        assert mock_ex.mock_calls == [
+            call('/foo'),
+            call('/bar'),
+            call('/baz'),
+        ]
+        assert mock_logger.mock_calls == [
+            call.debug('Attempting to find OWFS path/mountpoint from list '
+                       'of common options: %s', ['/foo', '/bar', '/baz']),
+            call.debug('Path %s does not exist; skipping', '/foo'),
+            call.debug('Path %s does not exist; skipping', '/bar'),
+            call.debug('Path %s does not exist; skipping', '/baz'),
+            call.debug('Could not discover any OWFS at known mountpoints')
+        ]
+
+    def test_get_temp_scale(self):
+        with patch('%s.open' % pbm, mock_open(read_data='F ')) as mock_opn:
+            res = self.cls._get_temp_scale('/foo/bar')
+        assert res == 'F'
+        assert mock_opn.mock_calls == [
+            call('/foo/bar/settings/units/temperature_scale', 'r'),
+            call().__enter__(),
+            call().read(),
+            call().__exit__(None, None, None)
+        ]
+
+    def test_sensors_present_true(self):
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch('%s._find_sensors' % pb, autospec=True) as mock_find:
+                mock_find.return_value = ['A', 'B']
+                res = self.cls.sensors_present()
+        assert res is True
+        assert mock_find.mock_calls == [call(self.cls)]
+        assert mock_logger.mock_calls == [
+            call.debug('Found %d sensors present: %s', 2, ['A', 'B'])
+        ]
+
+    def test_sensors_present_false(self):
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch('%s._find_sensors' % pb, autospec=True) as mock_find:
+                mock_find.return_value = []
+                res = self.cls.sensors_present()
+        assert res is False
+        assert mock_find.mock_calls == [call(self.cls)]
+        assert mock_logger.mock_calls == [
+            call.debug('Found %d sensors present: %s', 0, [])
+        ]

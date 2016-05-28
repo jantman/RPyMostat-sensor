@@ -34,3 +34,47 @@ AUTHORS:
 Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 ##################################################################################
 """
+
+import sys
+
+from rpymostat_sensor.sensors.dummy import DummySensor
+
+# https://code.google.com/p/mock/issues/detail?id=249
+# py>=3.4 should use unittest.mock not the mock package on pypi
+if (
+        sys.version_info[0] < 3 or
+        sys.version_info[0] == 3 and sys.version_info[1] < 4
+):
+    from mock import patch, call, Mock, DEFAULT  # noqa
+else:
+    from unittest.mock import patch, call, Mock, DEFAULT  # noqa
+
+pbm = 'rpymostat_sensor.sensors.dummy'
+pb = '%s.DummySensor' % pbm
+
+
+class TestDummySensor(object):
+
+    def setup(self):
+        self.cls = DummySensor('myhostid')
+
+    def test_sensors_present(self):
+        assert self.cls.sensors_present() is True
+
+    def test_read(self):
+        with patch('%s.random.choice' % pbm) as mock_choice:
+            mock_choice.return_value = 12.34
+            res = self.cls.read()
+        assert mock_choice.mock_calls == [call(
+            [18, 18.25, 18.5, 18.75, 19, 19.25, 19.5, 19.75, 20, 20.25, 20.5,
+             20.75, 21, 21.25, 21.5, 21.75, 22, 22.25, 22.5, 22.75, 23, 23.25,
+             23.5, 23.75, 24, 24.25, 24.5, 24.75, 25, 25.25, 25.5, 25.75, 26,
+             26.25, 26.5, 26.75]
+        )]
+        assert res == {
+            'myhostid_dummy1': {
+                'type': 'dummy',
+                'value': 12.34,
+                'alias': 'dummy'
+            }
+        }
