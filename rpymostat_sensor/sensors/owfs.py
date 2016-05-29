@@ -158,33 +158,55 @@ class OWFS(BaseSensor):
         """
         sensors = []
         for subdir in os.listdir(self.owfs_path):
+            # skip if it's not a directory
             if not os.path.isdir(os.path.join(self.owfs_path, subdir)):
                 continue
+            # skip if it doesn't match the sensor regex
             if not self.sensor_dir_re.match(subdir):
                 continue
+            # skip if it doesn't have a temperature subdir
             temp_path = os.path.join(self.owfs_path, subdir, 'temperature')
             if not os.path.exists(temp_path):
                 continue
+            # looks like a temperature sensor; add what we can to the dict
             logger.debug('found temperature sensor at: %s', temp_path)
-            d = {'temp_path': temp_path}
-            with open(
-                    os.path.join(self.owfs_path, subdir, 'address'), 'r'
-            ) as fh:
-                d['address'] = fh.read().strip()
-            if os.path.exists(os.path.join(self.owfs_path, subdir, 'alias')):
-                with open(
-                        os.path.join(self.owfs_path, subdir, 'alias'), 'r'
-                ) as fh:
-                    tmp = fh.read().strip()
-                    if tmp != '':
-                        d['alias'] = tmp
-            if os.path.exists(os.path.join(self.owfs_path, subdir, 'type')):
-                with open(
-                        os.path.join(self.owfs_path, subdir, 'type'), 'r'
-                ) as fh:
-                    d['type'] = fh.read().strip()
+            d = {
+                'temp_path': temp_path,
+                'address': self._read_owfs_file(subdir, 'address')
+            }
+            alias = self._read_owfs_file(subdir, 'alias')
+            if alias is not None:
+                d['alias'] = alias
+            _type = self._read_owfs_file(subdir, 'type')
+            if _type is not None:
+                d['type'] = _type
             sensors.append(d)
         return sensors
+
+    def _read_owfs_file(self, sensor_dir, fname):
+        """
+        Read the contents of a file from OWFS; return None if the file does
+        not exist, or the strip()'ed contents if it does. Really just a helper
+        for cleaner unit testing.
+
+        :param sensor_dir: ``self.owfs_path`` subdir for the sensor
+        :type sensor_dir: str
+        :param fname: file name/path under ``sensor_dir``
+        :type fname: str
+        :return: stripped content str or None
+        """
+        path = os.path.join(self.owfs_path, sensor_dir, fname)
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, 'r') as fh:
+                tmp = fh.read().strip()
+        except Exception:
+            logger.debug('Exception reading %s', path, exc_info=1)
+            return None
+        if tmp == '':
+            return None
+        return tmp
 
     def read(self):
         """
@@ -220,7 +242,7 @@ class OWFS(BaseSensor):
         res = {}
         sensors = self._find_sensors()
         for sensor in sensors:
-            data = {'type': sensor['type']}
+            data = {'type': sensor.get('type', None)}
             if 'alias' in sensor and sensor['alias'] is not None:
                 data['alias'] = sensor['alias']
             try:

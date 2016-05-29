@@ -46,9 +46,9 @@ if (
         sys.version_info[0] < 3 or
         sys.version_info[0] == 3 and sys.version_info[1] < 4
 ):
-    from mock import patch, call, Mock, DEFAULT, mock_open  # noqa
+    from mock import patch, call, Mock, DEFAULT, mock_open, MagicMock  # noqa
 else:
-    from unittest.mock import patch, call, Mock, DEFAULT, mock_open  # noqa
+    from unittest.mock import patch, call, Mock, DEFAULT, mock_open, MagicMock  # noqa
 
 pbm = 'rpymostat_sensor.sensors.owfs'
 pb = '%s.OWFS' % pbm
@@ -63,6 +63,7 @@ class TestOWFS(object):
             _get_temp_scale=DEFAULT,
         ):
             self.cls = OWFS()
+            self.cls.owfs_path = '/my/path'
 
     def test_init_specified_path(self):
         with patch('%s.logger' % pbm, autospec=True) as mock_logger:
@@ -214,3 +215,285 @@ class TestOWFS(object):
         assert mock_logger.mock_calls == [
             call.debug('Found %d sensors present: %s', 0, [])
         ]
+
+    def test_find_sensors(self):
+        self.cls.owfs_path = '/my/path'
+
+        def se_read(klass, sensor_dir, fname):
+            if sensor_dir == '10.58F50F010800':
+                if fname == 'address':
+                    return '1058F50F01080047'
+                if fname == 'type':
+                    return 'DS18S20'
+            if sensor_dir == '10.58F50F020800':
+                if fname == 'address':
+                    return '1058F50F02080047'
+                if fname == 'alias':
+                    return 'myalias'
+            return None
+
+        def se_isdir(path):
+            dirs = [
+                '/my/path/10.58F50F010800',
+                '/my/path/10.58F50F020800',
+                '/my/path/81.C1252A000000',
+                '/my/path/alarm'
+            ]
+            if path in dirs:
+                return True
+            return False
+
+        def se_exists(path):
+            exist = [
+                '/my/path/10.58F50F010800',
+                '/my/path/10.58F50F010800/temperature',
+                '/my/path/10.58F50F020800',
+                '/my/path/10.58F50F020800/temperature',
+                '/my/path/10.58F50F020800/alias',
+                '/my/path/81.C1252A000000',
+                '/my/path/alarm'
+            ]
+            if path in exist:
+                return True
+            return False
+
+        dirlist = [
+            '10.58F50F010800',
+            '10.58F50F020800',
+            '81.C1252A000000',
+            'alarm',
+            'foo'
+        ]
+        mock_fh = MagicMock(create=True)
+        mock_fh.read.side_effect = se_read
+
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch('%s.os.listdir' % pbm, autospec=True) as mock_listdir:
+                mock_listdir.return_value = dirlist
+                with patch('%s.os.path.isdir' % pbm,
+                           autospec=True) as mock_isdir:
+                    mock_isdir.side_effect = se_isdir
+                    with patch('%s.os.path.exists' % pbm,
+                               autospec=True) as mock_exists:
+                        mock_exists.side_effect = se_exists
+                        with patch(
+                            '%s._read_owfs_file' % pb, autospec=True
+                        ) as mock_read:
+                            mock_read.side_effect = se_read
+                            res = self.cls._find_sensors()
+        assert res == [
+            {
+                'temp_path': '/my/path/10.58F50F010800/temperature',
+                'address': '1058F50F01080047',
+                'type': 'DS18S20'
+            },
+            {
+                'temp_path': '/my/path/10.58F50F020800/temperature',
+                'address': '1058F50F02080047',
+                'alias': 'myalias',
+            }
+        ]
+        assert mock_listdir.mock_calls == [call('/my/path')]
+        assert mock_isdir.mock_calls == [
+            call('/my/path/10.58F50F010800'),
+            call('/my/path/10.58F50F020800'),
+            call('/my/path/81.C1252A000000'),
+            call('/my/path/alarm'),
+            call('/my/path/foo')
+        ]
+        assert mock_exists.mock_calls == [
+            call('/my/path/10.58F50F010800/temperature'),
+            call('/my/path/10.58F50F020800/temperature'),
+            call('/my/path/81.C1252A000000/temperature')
+        ]
+        assert mock_read.mock_calls == [
+            call(self.cls, '10.58F50F010800', 'address'),
+            call(self.cls, '10.58F50F010800', 'alias'),
+            call(self.cls, '10.58F50F010800', 'type'),
+            call(self.cls, '10.58F50F020800', 'address'),
+            call(self.cls, '10.58F50F020800', 'alias'),
+            call(self.cls, '10.58F50F020800', 'type')
+        ]
+        assert mock_logger.mock_calls == [
+            call.debug('found temperature sensor at: %s',
+                       '/my/path/10.58F50F010800/temperature'),
+            call.debug('found temperature sensor at: %s',
+                       '/my/path/10.58F50F020800/temperature'),
+        ]
+
+    def test_read_owfs_file(self):
+        d = '  foo bar '
+        with patch('%s.os.path.exists' % pbm, autospec=True) as mock_exists:
+            mock_exists.return_value = True
+            with patch('%s.open' % pbm, mock_open(read_data=d)) as mock_opn:
+                res = self.cls._read_owfs_file('sdir', 'foo')
+        assert res == 'foo bar'
+        assert mock_exists.mock_calls == [call('/my/path/sdir/foo')]
+        assert mock_opn.mock_calls == [
+            call('/my/path/sdir/foo', 'r'),
+            call().__enter__(),
+            call().read(),
+            call().__exit__(None, None, None)
+        ]
+
+    def test_read_owfs_file_no_exist(self):
+        d = '  foo bar '
+        with patch('%s.os.path.exists' % pbm, autospec=True) as mock_exists:
+            mock_exists.return_value = False
+            with patch('%s.open' % pbm, mock_open(read_data=d)) as mock_opn:
+                res = self.cls._read_owfs_file('sdir', 'foo')
+        assert res is None
+        assert mock_exists.mock_calls == [call('/my/path/sdir/foo')]
+        assert mock_opn.mock_calls == []
+
+    def test_read_owfs_file_empty(self):
+        d = ' '
+        with patch('%s.os.path.exists' % pbm, autospec=True) as mock_exists:
+            mock_exists.return_value = True
+            with patch('%s.open' % pbm, mock_open(read_data=d)) as mock_opn:
+                res = self.cls._read_owfs_file('sdir', 'foo')
+        assert res is None
+        assert mock_exists.mock_calls == [call('/my/path/sdir/foo')]
+        assert mock_opn.mock_calls == [
+            call('/my/path/sdir/foo', 'r'),
+            call().__enter__(),
+            call().read(),
+            call().__exit__(None, None, None)
+        ]
+
+    def test_read_owfs_file_exception(self):
+
+        exc = Exception()
+
+        def se_exc(*args):
+            raise exc
+
+        mock_read = mock_open()
+        mock_read.return_value.read.side_effect = se_exc
+
+        with patch('%s.os.path.exists' % pbm, autospec=True) as mock_exists:
+            mock_exists.return_value = True
+            with patch('%s.open' % pbm, mock_read, create=True) as mock_opn:
+                with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+                    res = self.cls._read_owfs_file('sdir', 'foo')
+        assert res is None
+        assert mock_exists.mock_calls == [call('/my/path/sdir/foo')]
+        assert len(mock_opn.mock_calls) == 4
+        assert mock_opn.mock_calls[0] == call('/my/path/sdir/foo', 'r')
+        assert mock_logger.mock_calls == [
+            call.debug('Exception reading %s', '/my/path/sdir/foo', exc_info=1)
+        ]
+
+    def test_read(self):
+        """
+        there's some crazyness here trying to mock open() with different return
+        values depending on the path
+        """
+        sensors = [
+            {
+                'address': 'sensor1',
+                'temp_path': '/foo/bar/one'
+            },
+            {
+                'type': 'mytype',
+                'alias': 'myalias',
+                'address': 'sensor2',
+                'temp_path': '/foo/bar/two'
+            },
+            {
+                'address': 'sensor3',
+                'temp_path': '/foo/bar/three'
+            }
+        ]
+
+        exc = Exception()
+
+        def se_exc(*args):
+            raise exc
+
+        mock_one = MagicMock(name='mock_one')
+        mock_one.__enter__.return_value.read.return_value = '11.234'
+        m_one = mock_open(mock=mock_one)
+
+        mock_two = MagicMock(name='mock_two')
+        mock_two.__enter__.return_value.read.return_value = '22.567'
+        m_two = mock_open(mock=mock_two)
+
+        mock_three = MagicMock(name='mock_three')
+        mock_three.__enter__.return_value.read.side_effect = se_exc
+        m_three = mock_open(mock=mock_three)
+
+        mock_other = MagicMock(name='mock_other')
+        mock_other.__enter__.return_value.read.return_value = '999.99'
+        m_other = mock_open(mock=mock_other)
+
+        def se_opn(*args):
+            print(args)
+            if args[0] == '/foo/bar/one':
+                return m_one
+            if args[0] == '/foo/bar/two':
+                return m_two
+            if args[0] == '/foo/bar/three':
+                return m_three
+            return m_other
+
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch('%s._find_sensors' % pb, autospec=True) as mock_find:
+                with patch('%s.open' % pbm, create=True) as mock_opn:
+                    mock_opn.side_effect = se_opn
+                    mock_find.return_value = sensors
+                    res = self.cls.read()
+        assert mock_find.mock_calls == [call(self.cls)]
+        assert mock_opn.mock_calls == [
+            call('/foo/bar/one', 'r'),
+            call('/foo/bar/two', 'r'),
+            call('/foo/bar/three', 'r')
+        ]
+        assert m_one.mock_calls == [
+            call.__enter__(),
+            call.__enter__().read(),
+            call.__exit__(None, None, None)
+        ]
+        assert m_two.mock_calls == [
+            call.__enter__(),
+            call.__enter__().read(),
+            call.__exit__(None, None, None)
+        ]
+        # third arg to third call is a traceback, so assert about everything
+        # else
+        assert len(m_three.mock_calls) == 3
+        assert m_three.mock_calls[0] == call.__enter__()
+        assert m_three.mock_calls[1] == call.__enter__().read()
+        # third call is __exit__
+        assert m_three.mock_calls[2][0] == '__exit__'
+        # first and second args to that third call...
+        assert m_three.mock_calls[2][1][0] == type(exc)
+        assert m_three.mock_calls[2][1][1] == exc
+        assert m_other.mock_calls == []
+        assert mock_logger.mock_calls == [
+            call.debug('Reading temperature from sensor %s at %s', 'sensor1',
+                       '/foo/bar/one'),
+            call.debug('Got temperature of %s from %s', 11.234, 'sensor1'),
+            call.debug('Reading temperature from sensor %s at %s', 'sensor2',
+                       '/foo/bar/two'),
+            call.debug('Got temperature of %s from %s', 22.567, 'sensor2'),
+            call.debug('Reading temperature from sensor %s at %s', 'sensor3',
+                       '/foo/bar/three'),
+            call.debug('Exception reading from sensor %s', 'sensor3',
+                       exc_info=1)
+        ]
+        assert res == {
+            'sensor1': {
+                'type': None,
+                'value': 11.234
+            },
+            'sensor2': {
+                'type': 'mytype',
+                'alias': 'myalias',
+                'value': 22.567
+            },
+            'sensor3': {
+                'type': None,
+                'value': None
+            }
+        }
