@@ -52,7 +52,8 @@ with open('README.rst') as file:
     long_description = file.read()
 
 requires = [
-    'requests'
+    'requests',
+    'rpymostat-common'
 ]
 
 classifiers = [

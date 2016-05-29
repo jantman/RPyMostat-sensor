@@ -49,9 +49,9 @@ if (
         sys.version_info[0] < 3 or
         sys.version_info[0] == 3 and sys.version_info[1] < 4
 ):
-    from mock import patch, call, Mock, DEFAULT  # noqa
+    from mock import patch, call, Mock, DEFAULT, PropertyMock  # noqa
 else:
-    from unittest.mock import patch, call, Mock, DEFAULT  # noqa
+    from unittest.mock import patch, call, Mock, DEFAULT, PropertyMock  # noqa
 
 pbm = 'rpymostat_sensor.sensor_daemon'
 pb = '%s.SensorDaemon' % pbm
@@ -468,4 +468,23 @@ class TestSensorDaemon(object):
             call.debug('POSTing sensor data to %s: %s', url, data),
             call.exception('Exception caught when trying to POST data to '
                            'Engine; will try again at next interval.')
+        ]
+
+    def test_find_host_id(self):
+        with patch('%s.SystemID.id_string' % pbm,
+                   new_callable=PropertyMock) as mock_sys_id:
+            mock_sys_id.return_value = 'utilsHostId'
+            res = self.cls.find_host_id()
+        assert res == 'utilsHostId'
+        assert mock_sys_id.mock_calls == [call()]
+
+    def test_discover_engine(self):
+        with patch('%s.utils_discover_engine' % pbm, autospec=True) as mock_de:
+            with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+                mock_de.return_value = ('engine_addr', 1234)
+                res = self.cls.discover_engine()
+        assert res == ('engine_addr', 1234)
+        assert mock_de.mock_calls == [call()]
+        assert mock_logger.mock_calls == [
+            call.info('Discovered Engine at %s:%s', 'engine_addr', 1234)
         ]

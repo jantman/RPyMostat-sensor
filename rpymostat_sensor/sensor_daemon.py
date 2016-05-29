@@ -41,6 +41,9 @@ import pkg_resources
 import requests
 
 from rpymostat_sensor.sensors.dummy import DummySensor
+from rpymostat_common.unique_ids import SystemID
+from rpymostat_common.discovery import discover_engine as utils_discover_engine
+
 
 logger = logging.getLogger(__name__)
 
@@ -136,12 +139,12 @@ class SensorDaemon(object):
         """
         Auto-discover the RPyMostat Engine.
 
-        @TODO this should call a method in RPyMostat-common
-        :raises: RuntimeError if discovery fails
         :returns: 2-tuple of engine address (str), engine port (int)
         :rtype: tuple
         """
-        raise NotImplementedError("Engine autodiscovery not implemented.")
+        ea, ep = utils_discover_engine()
+        logger.info("Discovered Engine at %s:%s", ea, ep)
+        return ea, ep
 
     def find_host_id(self):
         """
@@ -152,7 +155,7 @@ class SensorDaemon(object):
         :return: unique host ID
         :rtype: str
         """
-        return 'myhostid'
+        return SystemID().id_string
 
     def _sensor_classes(self):
         """
