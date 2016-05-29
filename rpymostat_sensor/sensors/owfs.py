@@ -48,6 +48,8 @@ class OWFS(BaseSensor):
     Sensor class to read OWFS sensors. Currently only tested with DS18S20.
     """
 
+    _description = 'OWFS Sensors'
+
     # list of filesystem paths to check when attempting to discover OWFS
     owfs_paths = [
         '/run/owfs',

@@ -49,12 +49,45 @@ if (
         sys.version_info[0] < 3 or
         sys.version_info[0] == 3 and sys.version_info[1] < 4
 ):
-    from mock import patch, call, Mock, DEFAULT, PropertyMock  # noqa
+    from mock import patch, call, Mock, DEFAULT, PropertyMock, MagicMock  # noqa
 else:
-    from unittest.mock import patch, call, Mock, DEFAULT, PropertyMock  # noqa
+    from unittest.mock import patch, call, Mock, DEFAULT, PropertyMock, MagicMock  # noqa
 
 pbm = 'rpymostat_sensor.sensor_daemon'
 pb = '%s.SensorDaemon' % pbm
+
+
+class TestSensor(BaseSensor):
+
+    _description = 'foo desc'
+
+    def __init__(self, argOne, argTwo, kwarg1=None, kwarg2=1234):
+        """
+        Some text here
+        About the init function
+
+        Foo
+
+        Bar.
+
+        :param argOne: arg one info
+        :type argOne: str
+        :param argTwo: arg two info is a
+          long
+          line
+        :type arg2: int
+        :param kwarg1: kwarg1 info
+        :type kwarg1: str
+        :param kwarg2: kwarg2 info
+        :return: foo
+        """
+        pass
+
+    def sensors_present(self):
+        return True
+
+    def read(self):
+        return {}
 
 
 class TestSensorDaemon(object):
@@ -488,3 +521,114 @@ class TestSensorDaemon(object):
         assert mock_logger.mock_calls == [
             call.info('Discovered Engine at %s:%s', 'engine_addr', 1234)
         ]
+
+    def test_get_varnames(self):
+        docstr = {
+            'params': {
+                'argOne': 'arg one info',
+                'argTwo': 'arg two info is a long line',
+                'kwarg1': 'kwarg1 info',
+            },
+            'types': {
+                'argOne': 'str',
+                'argTwo': 'int',
+                'kwarg1': 'str'
+            }
+        }
+        with patch('%s._parse_docstring' % pb, autospec=True) as mock_pd:
+            mock_pd.return_value = docstr
+            res = self.cls._get_varnames(TestSensor)
+        assert res == {
+            'argOne': '(str) arg one info',
+            'argTwo': '(int) arg two info is a long line',
+            'kwarg1=None': '(str) kwarg1 info',
+            'kwarg2=1234': ''
+        }
+
+    def test_get_varnames_no_default(self):
+
+        class Foo(object):
+
+            def __init__(self, arg1, arg2):
+                pass
+
+        docstr = {
+            'params': {
+                'arg1': 'arg one info'
+            },
+            'types': {
+                'arg1': 'str'
+            }
+        }
+        with patch('%s._parse_docstring' % pb, autospec=True) as mock_pd:
+            mock_pd.return_value = docstr
+            res = self.cls._get_varnames(Foo)
+        assert res == {
+            'arg1': '(str) arg one info',
+            'arg2': '',
+        }
+
+    def test_parse_docstring(self):
+        docstring = """
+        Some text here
+        About the init function
+
+        Foo
+
+        Bar.
+
+        :param argOne: arg one info
+        :type argOne: str
+        :param argTwo: arg two info is a
+          long
+          line
+        :type argTwo: int
+        :param kwarg1: kwarg1 info
+        :type kwarg1: str
+        :param kwarg2: kwarg2 info
+        :return: foo
+        """
+        res = self.cls._parse_docstring(docstring)
+        assert res == {
+            'params': {
+                'argOne': 'arg one info',
+                'argTwo': 'arg two info is a long line',
+                'kwarg1': 'kwarg1 info',
+                'kwarg2': 'kwarg2 info'
+            },
+            'types': {
+                'argOne': 'str',
+                'argTwo': 'int',
+                'kwarg1': 'str'
+            }
+        }
+
+    def test_list_classes(self, capsys):
+        varnames_one = {
+            'argOne': '(int) arg one info',
+            'argTwo': 'arg two info',
+            'kwarg1=foo': '(str) kwarg1 info'
+        }
+
+        m1 = MagicMock(__name__='clsone', _description='desc1')
+        m2 = MagicMock(__name__='cls2', _description='desc2')
+
+        def se_gv(_self, klass):
+            if klass == m1:
+                return varnames_one
+            return {}
+
+        with patch('%s._sensor_classes' % pb, autospec=True) as mock_classes:
+            with patch('%s._get_varnames' % pb, autospec=True) as mock_gv:
+                mock_classes.return_value = [m1, m2]
+                mock_gv.side_effect = se_gv
+                self.cls.list_classes()
+        expected_out = "clsone - desc1\n"
+        expected_out += "    argOne - (int) arg one info\n"
+        expected_out += "    argTwo - arg two info\n"
+        expected_out += "    kwarg1=foo - (str) kwarg1 info\n"
+        expected_out += "\n"
+        expected_out += "cls2 - desc2\n\n"
+        out, err = capsys.readouterr()
+        assert err == ''
+        assert out == expected_out

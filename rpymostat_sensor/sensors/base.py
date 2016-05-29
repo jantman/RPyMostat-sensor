@@ -47,6 +47,9 @@ class BaseSensor(object):
     implement. Any class that implements this interface will be usable to
     discover and read sensors. Note that classes implementing this must also
     have a matching entrypoint in order to be discovered.
+
+    If the class constructor takes any arguments, they must be documented in
+    Sphinx format in the docstring of the __init__ method.
     """
 
     __metaclass__ = abc.ABCMeta
@@ -55,27 +58,14 @@ class BaseSensor(object):
     # for use in generated documentation.
     _description = "Unknown"
 
-    def get_varnames(self):
+    def get_description(self):
         """
-        Return a dict of variable names that this class's init method takes,
-        to string descriptions of them (if present).
+        Return the sensor class's _description attribute.
 
->>> class Foo(object):
-...     ""
-...     my docstring
-...     ""
-...     def __init__(self, arg1, arg2, kwarg1='foo', kwarg2='bar'):
-...         pass
-...
->>> Foo.__init__.func_code.co_varnames
-('self', 'arg1', 'arg2', 'kwarg1', 'kwarg2')
->>> Foo.__init__.__doc__
->>> Foo.__doc__
-'\n    my docstring\n    '
-
-        :return:
+        :return: Sensor class's description
+        :rtype: str
         """
-        raise NotImplementedError()
+        return self._description
 
     @abc.abstractmethod
     def sensors_present(self):
