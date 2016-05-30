@@ -82,29 +82,29 @@ class BaseSensor(object):
     @abc.abstractmethod
     def read(self):
         """
-        Read all present temperature sensors.
-
-        Returns a dict of sensor unique IDs (keys) to dicts of sensor
-        information.
+        Read all present temperature sensors. Returns a dict of sensor unique
+        IDs (keys) to dicts of sensor information.
 
         Return dict format:
 
-        {
-            'unique_id_1': {
-                'type': 'sensor_type_string',
-                'value': 1.234,
-                'alias': 'str',
-                'extra': ''
-            },
-            ...
-        }
+        .. code-block:: python
+
+            {
+                'unique_id_1': {
+                    'type': 'sensor_type_string',
+                    'value': 1.234,
+                    'alias': 'str',
+                    'extra': ''
+                },
+                ...
+            }
 
         Each dict key is a globally-unique sensor ID. Each value is a dict
         with the following keys:
 
         - type: (str) sensor type
         - value: (float) current temperature in degress Celsius, or None if
-          there is an error reading it.
+           there is an error reading it.
         - alias: (str) a human-readable alias/name for the sensor, if present
         - extra: (str) any extra information about the sensor
 

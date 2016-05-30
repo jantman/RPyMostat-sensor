@@ -17,7 +17,7 @@ import os
 import re
 # to let sphinx find the actual source...
 sys.path.insert(0, os.path.abspath("../.."))
-from RPyMostat-sensor.version import _VERSION
+from rpymostat_sensor.version import VERSION as _VERSION
 import sphinx.environment
 from docutils.utils import get_source_line
 
@@ -302,7 +302,9 @@ linkcheck_ignore = [
     r'https?://www\.virtualenv\.org.*',
     r'https?://.*\.readthedocs\.org.*',
     r'https?://codecov\.io.*',
-    r'https?://.*readthedocs\.org.*'
+    r'https?://.*readthedocs\.org.*',
+    r'https?://testpypi\.python\.org.*',
+    r'https?://pypi\.python\.org.*'
 ]
 
 # exclude module docstrings - see http://stackoverflow.com/a/18031024/211734
@@ -311,7 +313,7 @@ def remove_module_docstring(app, what, name, obj, options, lines):
         del lines[:]
 
 # ignore non-local image warnings
-def _warn_node(self, msg, node):
+def _warn_node(self, msg, node, **kwargs):
     if not msg.startswith('nonlocal image URI found:'):
         self._warnfunc(msg, '%s:%s' % get_source_line(node))
 

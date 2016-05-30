@@ -146,12 +146,16 @@ class OWFS(BaseSensor):
         Find all OWFS temperature sensors present. Return a list of dicts of
         information about them. Dicts have the format:
 
-        {
-            'temp_path': 'absolute path to read temperature from',
-            'alias': 'sensor alias, if set',
-            'address': 'sensor address',
-            'type': 'sensor type'
-        }
+        Return dict format:
+
+        .. code-block:: python
+
+            {
+                'temp_path': 'absolute path to read temperature from',
+                'alias': 'sensor alias, if set',
+                'address': 'sensor address',
+                'type': 'sensor type'
+            }
 
         The only *required* key in the dict is ``temp_path``.
 
@@ -219,15 +223,17 @@ class OWFS(BaseSensor):
 
         Return dict format:
 
-        {
-            'unique_id_1': {
-                'type': 'sensor_type_string',
-                'value': 1.234,
-                'alias': 'str',
-                'extra': ''
-            },
-            ...
-        }
+        .. code-block:: python
+
+            {
+                'unique_id_1': {
+                    'type': 'sensor_type_string',
+                    'value': 1.234,
+                    'alias': 'str',
+                    'extra': ''
+                },
+                ...
+            }
 
         Each dict key is a globally-unique sensor ID. Each value is a dict
         with the following keys:

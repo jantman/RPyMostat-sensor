@@ -68,13 +68,17 @@ class DummySensor(BaseSensor):
         Returns a dict, where the value is a pseudo-random float in the range
         of 18 to 26.75 (inclusive) incremented by .25.
 
-        {
-            '<self.host_id>_dummy1': {
-                'type': 'dummy',
-                'value': <value>,
-                'alias': 'dummy'
+        Return dict format:
+
+        .. code-block:: python
+
+            {
+                '<self.host_id>_dummy1': {
+                    'type': 'dummy',
+                    'value': <value>,
+                    'alias': 'dummy'
+                }
             }
-        }
 
         :return: dict of sensor values and information.
         :rtype: dict
