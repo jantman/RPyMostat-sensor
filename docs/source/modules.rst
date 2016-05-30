@@ -1,7 +1,7 @@
-RPyMostat-sensor
-===============
+rpymostat_sensor
+================
 
 .. toctree::
    :maxdepth: 4
 
-   RPyMostat-sensor
+   rpymostat_sensor
