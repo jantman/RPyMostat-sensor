@@ -83,9 +83,10 @@ class Runner(object):
     def parse_args(self, argv):
         """
         parse arguments/options
+        trying some different things
 
         :param argv: argument list to parse, usually ``sys.argv[1:]``
-        :type argv: list
+        :type argv: :any:`list`
         :returns: parsed arguments
         :rtype: :py:class:`argparse.Namespace`
         """

@@ -67,7 +67,7 @@ class SensorDaemon(object):
         :param engine_port: Engine API port
         :type engine_port: int
         :param engine_addr: Engine API address
-        :type engine_addr: str
+        :type engine_addr: :py:class:`str <python:str>`
         :param interval: how many seconds to sleep between sensor poll/POST
         :type interval: float
         :param list_classes: if True, list all discovered classes and their
