@@ -158,7 +158,8 @@ class SensorDaemon(object):
         """
         return SystemID().id_string
 
-    def _sensor_classes(self):
+    @staticmethod
+    def _sensor_classes():
         """
         Find all :py:class:`~.BaseSensor` classes from the rpymostat.sensors
         entrypoint.
@@ -223,14 +224,16 @@ class SensorDaemon(object):
                      len(have_sensors))
         return have_sensors
 
-    def list_classes(self):
+    @staticmethod
+    def list_classes():
         """
         Print a list of sensor class names, along with their _description
         attributes (if present) and any arguments they accept.
         """
-        for cls in self._sensor_classes():
-            print('%s - %s' % (cls.__name__, cls._description))
-            v = self._get_varnames(cls)
+        print("Discovered Sensor Classes:\n")
+        for cls in SensorDaemon._sensor_classes():
+            print('%s (%s)' % (cls.__name__, cls._description))
+            v = SensorDaemon._get_varnames(cls)
             if len(v) == 0:
                 print("")
                 continue
@@ -238,7 +241,8 @@ class SensorDaemon(object):
                 print("    %s - %s" % (vname, v[vname]))
             print("")
 
-    def _parse_docstring(self, docstring):
+    @staticmethod
+    def _parse_docstring(docstring):
         """
         Given a docstring, attempt to parse out all ``:param foo:`` and
         ``:type foo:`` directives and their matching strings, collapsing
@@ -269,7 +273,8 @@ class SensorDaemon(object):
                 ' ', itm.group(2).strip())
         return res
 
-    def _get_varnames(self, klass):
+    @staticmethod
+    def _get_varnames(klass):
         """
         Return a dict of variable names that klass's init method takes,
         to string descriptions of them (if present).
@@ -283,13 +288,19 @@ class SensorDaemon(object):
         args = []
         kwargs = {}
         if func.func_defaults is not None and len(func.func_defaults) > 0:
-            args = func.func_code.co_varnames[1:len(func.func_defaults)+1]
-            kwarg_names = func.func_code.co_varnames[len(func.func_defaults)+1:]
+            if len(func.func_defaults) >= len(func.func_code.co_varnames)-1:
+                args = []
+                kwarg_names = func.func_code.co_varnames[1:]
+            else:
+                args = func.func_code.co_varnames[1:len(func.func_defaults)+1]
+                kwarg_names = func.func_code.co_varnames[
+                              len(func.func_defaults)+1:
+                ]
             for x, _default in enumerate(func.func_defaults):
                 kwargs[kwarg_names[x]] = func.func_defaults[x]
         else:
             args = func.func_code.co_varnames[1:]
-        docstr = self._parse_docstring(func.__doc__)
+        docstr = SensorDaemon._parse_docstring(func.__doc__)
         for argname in args:
             s = ''
             if argname in docstr['types']:

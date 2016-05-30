@@ -145,15 +145,15 @@ class TestSensorDaemon(object):
                 find_host_id=DEFAULT,
                 discover_engine=DEFAULT,
                 discover_sensors=DEFAULT,
-                list_classes=DEFAULT,
             ) as mocks:
                 with pytest.raises(SystemExit):
-                    SensorDaemon(list_classes=True)
+                    with patch('%s.list_classes' % pb) as mock_list:
+                        SensorDaemon(list_classes=True)
         assert mock_logger.mock_calls == []
         assert mocks['find_host_id'].mock_calls == []
         assert mocks['discover_engine'].mock_calls == []
         assert mocks['discover_sensors'].mock_calls == []
-        assert mocks['list_classes'].call_count == 1
+        assert mock_list.call_count == 1
 
     def test_init_nondefault(self):
         dummy = Mock()
@@ -354,11 +354,11 @@ class TestSensorDaemon(object):
         cls_args = {'Class1': {'foo': 'bar'}}
 
         with patch('%s.logger' % pbm, autospec=True) as mock_logger:
-            with patch('%s._sensor_classes' % pb, autospec=True) as m_classes:
+            with patch('%s._sensor_classes' % pb) as m_classes:
                 m_classes.return_value = classes
                 res = self.cls.discover_sensors(class_args=cls_args)
         assert res == [mock_cls1]
-        assert m_classes.mock_calls == [call(self.cls)]
+        assert m_classes.mock_calls == [call()]
         assert mock_cls1.mock_calls == [call.sensors_present()]
         assert mock1.mock_calls == [
             call(foo='bar'),
@@ -380,7 +380,7 @@ class TestSensorDaemon(object):
         self.cls.dummy_data = True
 
         with patch('%s.logger' % pbm, autospec=True) as mock_logger:
-            with patch('%s._sensor_classes' % pb, autospec=True) as m_classes:
+            with patch('%s._sensor_classes' % pb) as m_classes:
                 res = self.cls.discover_sensors()
         assert m_classes.mock_calls == []
         assert len(res) == 1
@@ -535,9 +535,29 @@ class TestSensorDaemon(object):
                 'kwarg1': 'str'
             }
         }
-        with patch('%s._parse_docstring' % pb, autospec=True) as mock_pd:
+        ds = """
+        Some text here
+        About the init function
+
+        Foo
+
+        Bar.
+
+        :param argOne: arg one info
+        :type argOne: str
+        :param argTwo: arg two info is a
+          long
+          line
+        :type arg2: int
+        :param kwarg1: kwarg1 info
+        :type kwarg1: str
+        :param kwarg2: kwarg2 info
+        :return: foo
+        """
+        with patch('%s._parse_docstring' % pb) as mock_pd:
             mock_pd.return_value = docstr
             res = self.cls._get_varnames(TestSensor)
+        assert mock_pd.mock_calls == [call(ds)]
         assert res == {
             'argOne': '(str) arg one info',
             'argTwo': '(int) arg two info is a long line',
@@ -545,11 +565,38 @@ class TestSensorDaemon(object):
             'kwarg2=1234': ''
         }
 
+    def test_get_varnames_kwargs_only(self):
+
+        class Foo(object):
+
+            def __init__(self, foo=1, bar='two'):
+                """mystr"""
+                pass
+
+        docstr = {
+            'params': {
+                'foo': 'arg one info',
+                'bar': 'arg two info is a long line',
+            },
+            'types': {
+                'foo': 'str',
+            }
+        }
+        with patch('%s._parse_docstring' % pb) as mock_pd:
+            mock_pd.return_value = docstr
+            res = self.cls._get_varnames(Foo)
+        assert mock_pd.mock_calls == [call('mystr')]
+        assert res == {
+            'foo=1': '(str) arg one info',
+            'bar=two': 'arg two info is a long line'
+        }
+
     def test_get_varnames_no_default(self):
 
         class Foo(object):
 
             def __init__(self, arg1, arg2):
+                """foo"""
                 pass
 
         docstr = {
@@ -560,9 +607,10 @@ class TestSensorDaemon(object):
                 'arg1': 'str'
             }
         }
-        with patch('%s._parse_docstring' % pb, autospec=True) as mock_pd:
+        with patch('%s._parse_docstring' % pb) as mock_pd:
             mock_pd.return_value = docstr
             res = self.cls._get_varnames(Foo)
+        assert mock_pd.mock_calls == [call("foo")]
         assert res == {
             'arg1': '(str) arg one info',
             'arg2': '',
@@ -613,22 +661,25 @@ class TestSensorDaemon(object):
         m1 = MagicMock(__name__='clsone', _description='desc1')
         m2 = MagicMock(__name__='cls2', _description='desc2')
 
-        def se_gv(_self, klass):
+        def se_gv(klass):
             if klass == m1:
                 return varnames_one
             return {}
 
-        with patch('%s._sensor_classes' % pb, autospec=True) as mock_classes:
-            with patch('%s._get_varnames' % pb, autospec=True) as mock_gv:
+        with patch('%s._sensor_classes' % pb) as mock_classes:
+            with patch('%s._get_varnames' % pb) as mock_gv:
                 mock_classes.return_value = [m1, m2]
                 mock_gv.side_effect = se_gv
-                self.cls.list_classes()
-        expected_out = "clsone - desc1\n"
+                SensorDaemon.list_classes()
+        assert mock_classes.mock_calls == [call()]
+        assert mock_gv.mock_calls == [call(m1), call(m2)]
+        expected_out = "Discovered Sensor Classes:\n\n"
+        expected_out += "clsone (desc1)\n"
         expected_out += "    argOne - (int) arg one info\n"
         expected_out += "    argTwo - arg two info\n"
         expected_out += "    kwarg1=foo - (str) kwarg1 info\n"
         expected_out += "\n"
-        expected_out += "cls2 - desc2\n\n"
+        expected_out += "cls2 (desc2)\n\n"
         out, err = capsys.readouterr()
         assert err == ''
         assert out == expected_out
