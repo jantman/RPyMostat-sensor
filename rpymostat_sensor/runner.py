@@ -86,7 +86,7 @@ class Runner(object):
         trying some different things
 
         :param argv: argument list to parse, usually ``sys.argv[1:]``
-        :type argv: :any:`list`
+        :type argv: list
         :returns: parsed arguments
         :rtype: :py:class:`argparse.Namespace`
         """

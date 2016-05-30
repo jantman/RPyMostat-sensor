@@ -88,7 +88,7 @@ class OWFS(BaseSensor):
 
     def _discover_owfs(self):
         """
-        If ``owfs_path`` is not specified for :py:meth:`.__init__`, attempt
+        If ``owfs_path`` is not specified for ``OWFS.__init__``, attempt
         to find an OWFS mounted at some of the common paths. If one is found,
         return the path to it. If not, return None.
 
