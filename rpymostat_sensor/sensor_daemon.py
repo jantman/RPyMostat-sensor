@@ -37,13 +37,14 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 
 import logging
 from time import sleep
-import pkg_resources
 import requests
 import re
 
 from rpymostat_sensor.sensors.dummy import DummySensor
+from rpymostat_sensor.sensors.base import BaseSensor
 from rpymostat_common.unique_ids import SystemID
 from rpymostat_common.discovery import discover_engine as utils_discover_engine
+from rpymostat_common.loader import load_classes
 
 
 logger = logging.getLogger(__name__)
@@ -167,17 +168,8 @@ class SensorDaemon(object):
         :return: list of :py:class:`~.BaseSensor` instances
         :rtype: list
         """
-        logger.debug("Loading sensor classes from entry points.")
-        classes = []
-        for entry_point in pkg_resources.iter_entry_points('rpymostat.sensors'):
-            try:
-                logger.debug("Trying to load sensor class from entry point: %s",
-                             entry_point.name)
-                obj = entry_point.load()
-                classes.append(obj)
-            except:
-                logger.debug('Exception raised when loading entry point %s',
-                             entry_point.name, exc_info=1)
+        # from rpymostat_common
+        classes = load_classes('rpymostat.sensors', superclass=BaseSensor)
         logger.debug("%s Sensor classes loaded successfully: %s", len(classes),
                      [c.__name__ for c in classes])
         return classes

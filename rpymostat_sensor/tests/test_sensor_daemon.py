@@ -37,7 +37,6 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 
 import sys
 import pytest
-import pkg_resources
 
 from rpymostat_sensor.sensor_daemon import SensorDaemon
 from rpymostat_sensor.sensors.dummy import DummySensor
@@ -251,59 +250,23 @@ class TestSensorDaemon(object):
 
     def test_sensor_classes(self):
 
-        def se_exc(*args, **kwargs):
-            raise Exception()
-
         class EP1(object):
             name = 'EP1'
-
-        mock_ep1 = Mock(spec_set=pkg_resources.EntryPoint)
-        type(mock_ep1).name = 'ep1'
-        mock_ep1.load.return_value = EP1
 
         class EP2(object):
             name = 'EP2'
 
-        mock_ep2 = Mock(spec_set=pkg_resources.EntryPoint)
-        type(mock_ep2).name = 'ep1'
-        mock_ep2.load.return_value = EP2
-
-        class EP3(object):
-            name = 'EP3'
-
-        mock_ep3 = Mock(spec_set=pkg_resources.EntryPoint)
-        type(mock_ep3).name = 'ep3'
-        mock_ep3.load.return_value = EP3
-
-        mock_ep4 = Mock(spec_set=pkg_resources.EntryPoint)
-        type(mock_ep4).name = 'ep4'
-        mock_ep4.load.side_effect = se_exc
-
-        entry_points = [mock_ep1, mock_ep2, mock_ep3, mock_ep4]
-
-        with patch('%s.DummySensor' % pbm, autospec=True) as mock_dummy:
+        with patch('%s.load_classes' % pbm, autospec=True) as mock_load:
             with patch('%s.logger' % pbm, autospec=True) as mock_logger:
-                with patch('%s.pkg_resources.iter_entry_points' % pbm,
-                           autospec=True) as mock_iep:
-                    mock_iep.return_value = entry_points
-                    res = self.cls._sensor_classes()
-        assert res == [EP1, EP2, EP3]
-        assert mock_dummy.mock_calls == []
-        assert mock_iep.mock_calls == [call('rpymostat.sensors')]
+                mock_load.return_value = [EP1, EP2]
+                res = self.cls._sensor_classes()
+        assert res == [EP1, EP2]
+        assert mock_load.mock_calls == [
+            call('rpymostat.sensors', superclass=BaseSensor)
+        ]
         assert mock_logger.mock_calls == [
-            call.debug('Loading sensor classes from entry points.'),
-            call.debug('Trying to load sensor class from entry point: %s',
-                       'ep1'),
-            call.debug('Trying to load sensor class from entry point: %s',
-                       'ep1'),
-            call.debug('Trying to load sensor class from entry point: %s',
-                       'ep3'),
-            call.debug('Trying to load sensor class from entry point: %s',
-                       'ep4'),
-            call.debug('Exception raised when loading entry point %s',
-                       'ep4', exc_info=1),
             call.debug("%s Sensor classes loaded successfully: %s",
-                       3, ['EP1', 'EP2', 'EP3'])
+                       2, ['EP1', 'EP2'])
         ]
 
     def test_discover_sensors(self):
