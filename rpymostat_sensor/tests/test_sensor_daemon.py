@@ -115,12 +115,15 @@ class TestSensorDaemon(object):
                 find_host_id=DEFAULT,
                 discover_engine=DEFAULT,
                 discover_sensors=DEFAULT,
-                list_classes=DEFAULT,
             ) as mocks:
-                mocks['find_host_id'].return_value = 'myhostid'
-                mocks['discover_engine'].return_value = ('foo.bar.baz', 1234)
-                mocks['discover_sensors'].return_value = sensors
-                cls = SensorDaemon()
+                with patch('%s._list_classes' % pbm,
+                           autospec=True) as mock_list:
+                    mocks['find_host_id'].return_value = 'myhostid'
+                    mocks['discover_engine'].return_value = (
+                        'foo.bar.baz', 1234
+                    )
+                    mocks['discover_sensors'].return_value = sensors
+                    cls = SensorDaemon()
         assert cls.dry_run is False
         assert cls.dummy_data is False
         assert cls.engine_port == 1234
@@ -134,9 +137,10 @@ class TestSensorDaemon(object):
         assert mocks['find_host_id'].mock_calls == [call(cls)]
         assert mocks['discover_engine'].mock_calls == [call(cls)]
         assert mocks['discover_sensors'].mock_calls == [call(cls, {})]
-        assert mocks['list_classes'].mock_calls == []
+        assert mock_list.mock_calls == []
 
-    def test_init_list_classes(self):
+    def test_init_list_classes(self, capsys):
+        mock_classes = Mock()
         with patch('%s.logger' % pbm, autospec=True) as mock_logger:
             with patch.multiple(
                 pb,
@@ -145,14 +149,18 @@ class TestSensorDaemon(object):
                 discover_engine=DEFAULT,
                 discover_sensors=DEFAULT,
             ) as mocks:
-                with pytest.raises(SystemExit):
-                    with patch('%s.list_classes' % pb) as mock_list:
-                        SensorDaemon(list_classes=True)
+                with patch('%s._sensor_classes' % pb) as mock_sensor_classes:
+                    mock_sensor_classes.return_value = mock_classes
+                    with patch('%s._list_classes' % pbm,
+                               new_callable=Mock) as mock_list:
+                        with pytest.raises(SystemExit):
+                            SensorDaemon(list_classes=True)
         assert mock_logger.mock_calls == []
+        assert mock_sensor_classes.mock_calls == [call()]
         assert mocks['find_host_id'].mock_calls == []
         assert mocks['discover_engine'].mock_calls == []
         assert mocks['discover_sensors'].mock_calls == []
-        assert mock_list.call_count == 1
+        assert mock_list.mock_calls == [call(mock_classes)]
 
     def test_init_nondefault(self):
         dummy = Mock()
@@ -163,19 +171,22 @@ class TestSensorDaemon(object):
                 find_host_id=DEFAULT,
                 discover_engine=DEFAULT,
                 discover_sensors=DEFAULT,
-                list_classes=DEFAULT,
             ) as mocks:
-                mocks['find_host_id'].return_value = 'myhostid'
-                mocks['discover_engine'].return_value = ('foo.bar.baz', 1234)
-                mocks['discover_sensors'].return_value = [dummy]
-                cls = SensorDaemon(
-                    dry_run=True,
-                    dummy_data=True,
-                    engine_port=1234,
-                    engine_addr='foo.bar.baz',
-                    interval=12.34,
-                    class_args={'foo': 'bar'}
-                )
+                with patch('%s._list_classes' % pbm,
+                           autospec=True) as mock_list:
+                    mocks['find_host_id'].return_value = 'myhostid'
+                    mocks['discover_engine'].return_value = (
+                        'foo.bar.baz', 1234
+                    )
+                    mocks['discover_sensors'].return_value = [dummy]
+                    cls = SensorDaemon(
+                        dry_run=True,
+                        dummy_data=True,
+                        engine_port=1234,
+                        engine_addr='foo.bar.baz',
+                        interval=12.34,
+                        class_args={'foo': 'bar'}
+                    )
         assert cls.dry_run is True
         assert cls.dummy_data is True
         assert cls.engine_port == 1234
@@ -192,7 +203,7 @@ class TestSensorDaemon(object):
         assert mocks['discover_sensors'].mock_calls == [
             call(cls, {'foo': 'bar'})
         ]
-        assert mocks['list_classes'].mock_calls == []
+        assert mock_list.mock_calls == []
 
     def test_init_no_sensors(self):
         with patch('%s.logger' % pbm, autospec=True) as mock_logger:
@@ -202,12 +213,15 @@ class TestSensorDaemon(object):
                 find_host_id=DEFAULT,
                 discover_engine=DEFAULT,
                 discover_sensors=DEFAULT,
-                list_classes=DEFAULT,
             ) as mocks:
-                mocks['find_host_id'].return_value = 'myhostid'
-                mocks['discover_engine'].return_value = ('foo.bar.baz', 1234)
-                with pytest.raises(SystemExit) as excinfo:
-                    SensorDaemon()
+                with patch('%s._list_classes' % pbm,
+                           autospec=True) as mock_list:
+                    mocks['find_host_id'].return_value = 'myhostid'
+                    mocks['discover_engine'].return_value = (
+                        'foo.bar.baz', 1234
+                    )
+                    with pytest.raises(SystemExit) as excinfo:
+                        SensorDaemon()
         assert mock_logger.mock_calls == [
             call.warning('This machine running with host_id %s', 'myhostid'),
             call.critical('ERROR - no sensors discovered.')
@@ -216,7 +230,7 @@ class TestSensorDaemon(object):
         assert mocks['discover_engine'].call_count == 1
         assert mocks['discover_sensors'].call_count == 1
         assert excinfo.value.code == 1
-        assert mocks['list_classes'].mock_calls == []
+        assert mock_list.mock_calls == []
 
     def test_run(self):
         def se_ras(klass):
@@ -484,165 +498,3 @@ class TestSensorDaemon(object):
         assert mock_logger.mock_calls == [
             call.info('Discovered Engine at %s:%s', 'engine_addr', 1234)
         ]
-
-    def test_get_varnames(self):
-        docstr = {
-            'params': {
-                'argOne': 'arg one info',
-                'argTwo': 'arg two info is a long line',
-                'kwarg1': 'kwarg1 info',
-            },
-            'types': {
-                'argOne': 'str',
-                'argTwo': 'int',
-                'kwarg1': 'str'
-            }
-        }
-        ds = """
-        Some text here
-        About the init function
-
-        Foo
-
-        Bar.
-
-        :param argOne: arg one info
-        :type argOne: str
-        :param argTwo: arg two info is a
-          long
-          line
-        :type arg2: int
-        :param kwarg1: kwarg1 info
-        :type kwarg1: str
-        :param kwarg2: kwarg2 info
-        :return: foo
-        """
-        with patch('%s._parse_docstring' % pb) as mock_pd:
-            mock_pd.return_value = docstr
-            res = self.cls._get_varnames(TestSensor)
-        assert mock_pd.mock_calls == [call(ds)]
-        assert res == {
-            'argOne': '(str) arg one info',
-            'argTwo': '(int) arg two info is a long line',
-            'kwarg1=None': '(str) kwarg1 info',
-            'kwarg2=1234': ''
-        }
-
-    def test_get_varnames_kwargs_only(self):
-
-        class Foo(object):
-
-            def __init__(self, foo=1, bar='two'):
-                """mystr"""
-                pass
-
-        docstr = {
-            'params': {
-                'foo': 'arg one info',
-                'bar': 'arg two info is a long line',
-            },
-            'types': {
-                'foo': 'str',
-            }
-        }
-        with patch('%s._parse_docstring' % pb) as mock_pd:
-            mock_pd.return_value = docstr
-            res = self.cls._get_varnames(Foo)
-        assert mock_pd.mock_calls == [call('mystr')]
-        assert res == {
-            'foo=1': '(str) arg one info',
-            'bar=two': 'arg two info is a long line'
-        }
-
-    def test_get_varnames_no_default(self):
-
-        class Foo(object):
-
-            def __init__(self, arg1, arg2):
-                """foo"""
-                pass
-
-        docstr = {
-            'params': {
-                'arg1': 'arg one info'
-            },
-            'types': {
-                'arg1': 'str'
-            }
-        }
-        with patch('%s._parse_docstring' % pb) as mock_pd:
-            mock_pd.return_value = docstr
-            res = self.cls._get_varnames(Foo)
-        assert mock_pd.mock_calls == [call("foo")]
-        assert res == {
-            'arg1': '(str) arg one info',
-            'arg2': '',
-        }
-
-    def test_parse_docstring(self):
-        docstring = """
-        Some text here
-        About the init function
-
-        Foo
-
-        Bar.
-
-        :param argOne: arg one info
-        :type argOne: str
-        :param argTwo: arg two info is a
-          long
-          line
-        :type argTwo: int
-        :param kwarg1: kwarg1 info
-        :type kwarg1: str
-        :param kwarg2: kwarg2 info
-        :return: foo
-        """
-        res = self.cls._parse_docstring(docstring)
-        assert res == {
-            'params': {
-                'argOne': 'arg one info',
-                'argTwo': 'arg two info is a long line',
-                'kwarg1': 'kwarg1 info',
-                'kwarg2': 'kwarg2 info'
-            },
-            'types': {
-                'argOne': 'str',
-                'argTwo': 'int',
-                'kwarg1': 'str'
-            }
-        }
-
-    def test_list_classes(self, capsys):
-        varnames_one = {
-            'argOne': '(int) arg one info',
-            'argTwo': 'arg two info',
-            'kwarg1=foo': '(str) kwarg1 info'
-        }
-
-        m1 = MagicMock(__name__='clsone', _description='desc1')
-        m2 = MagicMock(__name__='cls2', _description='desc2')
-
-        def se_gv(klass):
-            if klass == m1:
-                return varnames_one
-            return {}
-
-        with patch('%s._sensor_classes' % pb) as mock_classes:
-            with patch('%s._get_varnames' % pb) as mock_gv:
-                mock_classes.return_value = [m1, m2]
-                mock_gv.side_effect = se_gv
-                SensorDaemon.list_classes()
-        assert mock_classes.mock_calls == [call()]
-        assert mock_gv.mock_calls == [call(m1), call(m2)]
-        expected_out = "Discovered Sensor Classes:\n\n"
-        expected_out += "clsone (desc1)\n"
-        expected_out += "    argOne - (int) arg one info\n"
-        expected_out += "    argTwo - arg two info\n"
-        expected_out += "    kwarg1=foo - (str) kwarg1 info\n"
-        expected_out += "\n"
-        expected_out += "cls2 (desc2)\n\n"
-        out, err = capsys.readouterr()
-        assert err == ''
-        assert out == expected_out

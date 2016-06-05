@@ -38,13 +38,13 @@ Jason Antman <jason@jasonantman.com> <http://www.jasonantman.com>
 import logging
 from time import sleep
 import requests
-import re
 
 from rpymostat_sensor.sensors.dummy import DummySensor
 from rpymostat_sensor.sensors.base import BaseSensor
 from rpymostat_common.unique_ids import SystemID
 from rpymostat_common.discovery import discover_engine as utils_discover_engine
 from rpymostat_common.loader import load_classes
+from rpymostat_common.loader import list_classes as _list_classes
 
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,9 @@ class SensorDaemon(object):
         :type class_args: dict
         """
         if list_classes:
-            self.list_classes()
+            print("Sensor Classes:\n")
+            x = SensorDaemon._sensor_classes()
+            _list_classes(x)
             raise SystemExit()
         self.dry_run = dry_run
         self.dummy_data = dummy_data
@@ -215,96 +217,3 @@ class SensorDaemon(object):
         logger.debug("Discovered %d sensor classes with sensors present",
                      len(have_sensors))
         return have_sensors
-
-    @staticmethod
-    def list_classes():
-        """
-        Print a list of sensor class names, along with their _description
-        attributes (if present) and any arguments they accept.
-        """
-        print("Discovered Sensor Classes:\n")
-        for cls in SensorDaemon._sensor_classes():
-            print('%s (%s)' % (cls.__name__, cls._description))
-            v = SensorDaemon._get_varnames(cls)
-            if len(v) == 0:
-                print("")
-                continue
-            for vname in sorted(v.keys()):
-                print("    %s - %s" % (vname, v[vname]))
-            print("")
-
-    @staticmethod
-    def _parse_docstring(docstring):
-        """
-        Given a docstring, attempt to parse out all ``:param foo:`` and
-        ``:type foo:`` directives and their matching strings, collapsing
-        whitespace. Return a dict of keys 'params' and 'types', each being a
-        dict of name to string.
-
-        :param docstring: docstring to parse
-        :type docstring: str
-        :rtype: dict
-        """
-        param_re = re.compile(
-            r'^\s*:param ([^:]+):((?:(?!:param|:type|:return|:rtype).)*)',
-            re.S | re.M
-        )
-        type_re = re.compile(
-            r'^\s*:type ([^:]+):((?:(?!:param|:type|:return|:rtype).)*)',
-            re.S | re.M
-        )
-        whitespace_re = re.compile(r'\s+')
-
-        res = {'params': {}, 'types': {}}
-
-        for itm in param_re.finditer(docstring):
-            res['params'][itm.group(1).strip()] = whitespace_re.sub(
-                ' ', itm.group(2).strip())
-        for itm in type_re.finditer(docstring):
-            res['types'][itm.group(1).strip()] = whitespace_re.sub(
-                ' ', itm.group(2).strip())
-        return res
-
-    @staticmethod
-    def _get_varnames(klass):
-        """
-        Return a dict of variable names that klass's init method takes,
-        to string descriptions of them (if present).
-
-        :param klass: the class to get varnames for (from its __init__ method)
-        :type klass: abc.ABCMeta
-        :return: dict
-        """
-        func = klass.__init__.im_func
-        res = {}
-        args = []
-        kwargs = {}
-        if func.func_defaults is not None and len(func.func_defaults) > 0:
-            if len(func.func_defaults) >= len(func.func_code.co_varnames)-1:
-                args = []
-                kwarg_names = func.func_code.co_varnames[1:]
-            else:
-                args = func.func_code.co_varnames[1:len(func.func_defaults)+1]
-                kwarg_names = func.func_code.co_varnames[
-                              len(func.func_defaults)+1:
-                ]
-            for x, _default in enumerate(func.func_defaults):
-                kwargs[kwarg_names[x]] = func.func_defaults[x]
-        else:
-            args = func.func_code.co_varnames[1:]
-        docstr = SensorDaemon._parse_docstring(func.__doc__)
-        for argname in args:
-            s = ''
-            if argname in docstr['types']:
-                s = '(%s) ' % docstr['types'][argname]
-            if argname in docstr['params']:
-                s += docstr['params'][argname]
-            res[argname] = s
-        for argname, _default in kwargs.iteritems():
-            s = ''
-            if argname in docstr['types']:
-                s = '(%s) ' % docstr['types'][argname]
-            if argname in docstr['params']:
-                s += docstr['params'][argname]
-            res['%s=%s' % (argname, _default)] = s
-        return res
