@@ -80,8 +80,7 @@ class SensorDaemon(object):
         """
         if list_classes:
             print("Sensor Classes:\n")
-            x = SensorDaemon._sensor_classes()
-            _list_classes(x)
+            _list_classes(SensorDaemon._sensor_classes())
             raise SystemExit()
         self.dry_run = dry_run
         self.dummy_data = dummy_data

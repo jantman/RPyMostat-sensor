@@ -7,7 +7,7 @@ Sensor Support
 Built-In Sensor Support
 -----------------------
 
-* :py:class:`~rpymostat_sensor.sensors.owfs.OWFS` (Dallas Semi 1-Wire Sensors via OneWire FileSystem (OWFS))
+<<SENSORS HERE>>
 
 Adding Hardware Support
 ------------------------
