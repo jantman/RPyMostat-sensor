@@ -19,6 +19,10 @@ RPyMostat-sensor
    :target: https://codecov.io/github/jantman/RPyMostat-sensor?branch=master
    :alt: coverage report for master branch
 
+.. image:: https://badge.waffle.io/jantman/RPyMostat.png?label=ready&title=Ready
+   :target: https://waffle.io/jantman/RPyMostat
+   :alt: 'Stories in Ready - waffle.io'
+
 .. image:: http://www.repostatus.org/badges/0.1.0/active.svg
    :alt: Project Status: Active - The project has reached a stable, usable state and is being actively developed.
    :target: http://www.repostatus.org/#active
