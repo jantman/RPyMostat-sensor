@@ -69,7 +69,7 @@ class SensorDaemon(object):
         :type engine_port: int
         :param engine_addr: Engine API address
         :type engine_addr: str
-        :param interval: how many seconds to sleep between sensor poll/POST
+        :param interval: how many seconds to sleep between sensor poll/PUT
         :type interval: float
         :param list_classes: if True, list all discovered classes and their
           args, then raise SystemExit()
@@ -90,7 +90,7 @@ class SensorDaemon(object):
         self.host_id = self.find_host_id()
         logger.warning("This machine running with host_id %s", self.host_id)
         if self.dry_run:
-            logger.warning("DRY RUN MODE - will not POST data to Engine.")
+            logger.warning("DRY RUN MODE - will not PUT data to Engine.")
         if self.engine_addr is None:
             self.engine_addr, self.engine_port = self.discover_engine()
         self.sensors = self.discover_sensors(class_args)
@@ -126,17 +126,17 @@ class SensorDaemon(object):
             self.engine_addr, self.engine_port
         )
         try:
-            logger.debug('POSTing sensor data to %s: %s', url, data)
-            r = requests.post(url, json=data)
+            logger.debug('PUTting sensor data to %s: %s', url, data)
+            r = requests.put(url, json=data)
             if r.status_code != 202 and r.status_code != 201:
-                logger.error('Error POSTing sensor data; got status code %s: '
+                logger.error('Error PUTting sensor data; got status code %s: '
                              '%s', r.status_code, r.text)
                 return
         except:
-            logger.exception('Exception caught when trying to POST data to '
+            logger.exception('Exception caught when trying to PUT data to '
                              'Engine; will try again at next interval.')
             return None
-        logger.info('POSTed sensor data to Engine')
+        logger.info('PUT sensor data to Engine')
 
     def discover_engine(self):
         """
