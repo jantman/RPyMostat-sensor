@@ -23,9 +23,9 @@ RPyMostat-sensor
    :target: https://waffle.io/jantman/RPyMostat
    :alt: 'Stories in Ready - waffle.io'
 
-.. image:: http://www.repostatus.org/badges/0.1.0/active.svg
-   :alt: Project Status: Active - The project has reached a stable, usable state and is being actively developed.
-   :target: http://www.repostatus.org/#active
+.. image:: http://www.repostatus.org/badges/2.0.0/concept.svg
+   :alt: Project Status: Concept – Minimal or no implementation has been done yet, or the repository is only intended to be a limited example, demo, or proof-of-concept.
+   :target: http://www.repostatus.org/#concept
 
 This package/repo implements the Python sensor component of `RPyMostat <http://github.com/jantman/RPyMostat>`_. It
 discovers and reads local temperature sensors, and POSTs that information to the
