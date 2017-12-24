@@ -1,31 +1,11 @@
 RPyMostat-sensor
 ========================
 
-.. image:: https://pypip.in/v/RPyMostat-sensor/badge.png
-   :target: https://crate.io/packages/RPyMostat-sensor
+.. image:: http://www.repostatus.org/badges/latest/abandoned.svg
+   :alt: Project Status: Abandoned – Initial development has started, but there has not yet been a stable, usable release; the project has been abandoned and the author(s) do not intend on continuing development.
+   :target: http://www.repostatus.org/#abandoned
 
-.. image:: https://pypip.in/d/RPyMostat-sensor/badge.png
-   :target: https://crate.io/packages/RPyMostat-sensor
-
-.. image:: https://landscape.io/github/jantman/RPyMostat-sensor/master/landscape.svg
-   :target: https://landscape.io/github/jantman/RPyMostat-sensor/master
-   :alt: Code Health
-
-.. image:: https://secure.travis-ci.org/jantman/RPyMostat-sensor.png?branch=master
-   :target: http://travis-ci.org/jantman/RPyMostat-sensor
-   :alt: travis-ci for master branch
-
-.. image:: https://codecov.io/github/jantman/RPyMostat-sensor/coverage.svg?branch=master
-   :target: https://codecov.io/github/jantman/RPyMostat-sensor?branch=master
-   :alt: coverage report for master branch
-
-.. image:: https://badge.waffle.io/jantman/RPyMostat.png?label=ready&title=Ready
-   :target: https://waffle.io/jantman/RPyMostat
-   :alt: 'Stories in Ready - waffle.io'
-
-.. image:: http://www.repostatus.org/badges/2.0.0/concept.svg
-   :alt: Project Status: Concept – Minimal or no implementation has been done yet, or the repository is only intended to be a limited example, demo, or proof-of-concept.
-   :target: http://www.repostatus.org/#concept
+**This Project is Abandoned.** I started work on it and decided not to continue. I doubt I ever will, but I'm leaving the code up nonetheless.
 
 This package/repo implements the Python sensor component of `RPyMostat <http://github.com/jantman/RPyMostat>`_. It
 discovers and reads local temperature sensors, and POSTs that information to the
